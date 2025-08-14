@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: coachbot-v2
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: DEFAULT_PROVIDER
+        value: anthropic
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: USERS_PATH
+        value: /data/users.json
+      - key: JOURNAL_PATH
+        value: /data/journal.json
+      - key: META_PATH
+        value: /data/meta.json
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
