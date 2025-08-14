@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CoachBot Admin - Dashboard</title>
+    <style>
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --accent: #f093fb;
+            --accent2: #f5576c;
+            --success: #00d4aa;
+            --warning: #ffb347;
+            --danger: #ff6b6b;
+            --glass: rgba(255, 255, 255, 0.15);
+            --glass-border: rgba(255, 255, 255, 0.2);
+            --text: #333;
+            --text-light: #666;
+            --shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            min-height: 100vh;
+            color: var(--text);
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .glass {
+            background: var(--glass);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            box-shadow: var(--shadow);
+        }
+
+        .header {
+            text-align: center;
+            padding: 30px;
+            margin-bottom: 30px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 10px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .auth-section {
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        input {
+            width: 100%;
+            padding: 15px 20px;
+            border: none;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.9);
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        input:focus {
+            outline: none;
+            background: white;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 15px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+            color: white;
+            box-shadow: 0 8px 25px rgba(240, 147, 251, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 35px rgba(240, 147, 251, 0.4);
+        }
+
+        .dashboard {
+            display: none;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+
+        .stat-card {
+            padding: 30px;
+            text-align: center;
+            color: white;
+            border-radius: 15px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--glass);
+            backdrop-filter: blur(20px);
+            z-index: -1;
+        }
+
+        .stat-number {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 8px rgba(0,0,0,0.3);
+        }
+
+        .stat-label {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            font-weight: 500;
+        }
+
+        .stat-card.users {
+            background: linear-gradient(135deg, var(--success) 0%, #00a085 100%);
+        }
+
+        .stat-card.messages {
+            background: linear-gradient(135deg, var(--warning) 0%, #e67e22 100%);
+        }
+
+        .stat-card.active {
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+        }
+
+        .chart-container {
+            padding: 30px;
+            margin-bottom: 30px;
+            color: white;
+        }
+
+        .chart-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .chart {
+            height: 300px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            display: flex;
+            align-items: end;
+            justify-content: space-around;
+            padding: 20px;
+            gap: 10px;
+        }
+
+        .chart-bar {
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+            border-radius: 4px 4px 0 0;
+            min-width: 30px;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: end;
+            align-items: center;
+            color: white;
+            font-weight: 600;
+            font-size: 12px;
+        }
+
+        .chart-value {
+            position: absolute;
+            top: -25px;
+            color: white;
+            font-weight: bold;
+        }
+
+        .chart-label {
+            margin-top: 10px;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 11px;
+        }
+
+        .users-table {
+            padding: 30px;
+            color: white;
+        }
+
+        .table-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .table-container {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        th {
+            background: rgba(255, 255, 255, 0.1);
+            font-weight: 600;
+            color: white;
+        }
+
+        td {
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .role-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .role-admin {
+            background: var(--danger);
+            color: white;
+        }
+
+        .role-user {
+            background: var(--success);
+            color: white;
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .logout-section {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .logout-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .error {
+            background: var(--danger);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .chart {
+                height: 200px;
+                padding: 10px;
+            }
+            
+            .table-container {
+                overflow-x: auto;
+            }
+            
+            table {
+                min-width: 600px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header glass">
+            <h1>🛠️ CoachBot Admin</h1>
+            <p>Dashboard de gestion et statistiques</p>
+        </div>
+
+        <!-- Section Authentification -->
+        <div id="authSection" class="auth-section glass">
+            <h2 style="margin-bottom: 30px; color: var(--primary);">Connexion Admin</h2>
+            <form id="adminLoginForm">
+                <div class="form-group">
+                    <label for="adminEmail">Email Admin</label>
+                    <input type="email" id="adminEmail" required>
+                </div>
+                <div class="form-group">
+                    <label for="adminPassword">Mot de passe</label>
+                    <input type="password" id="adminPassword" required>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    Se connecter
+                </button>
+            </form>
+            <div id="errorMessage"></div>
+        </div>
+
+        <!-- Dashboard Admin -->
+        <div id="dashboardSection" class="dashboard">
+            <!-- Statistiques -->
+            <div class="stats-grid">
+                <div class="stat-card users glass">
+                    <div class="stat-number" id="totalUsers">0</div>
+                    <div class="stat-label">Utilisateurs Total</div>
+                </div>
+                <div class="stat-card messages glass">
+                    <div class="stat-number" id="totalMessages">0</div>
+                    <div class="stat-label">Messages Échangés</div>
+                </div>
+                <div class="stat-card active glass">
+                    <div class="stat-number" id="activeToday">0</div>
+                    <div class="stat-label">Actifs Aujourd'hui</div>
+                </div>
+            </div>
+
+            <!-- Graphique par jour -->
+            <div class="chart-container glass">
+                <div class="chart-title">📊 Messages par Jour de Coaching</div>
+                <div class="chart" id="messagesChart">
+                    <!-- Généré dynamiquement -->
+                </div>
+            </div>
+
+            <!-- Table des utilisateurs -->
+            <div class="users-table glass">
+                <div class="table-title">👥 Gestion des Utilisateurs</div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Email</th>
+                                <th>Nom</th>
+                                <th>Rôle</th>
+                                <th>Inscription</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody">
+                            <!-- Généré dynamiquement -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Déconnexion -->
+            <div class="logout-section">
+                <button class="logout-btn" onclick="logout()">
+                    🚪 Déconnexion Admin
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class AdminDashboard {
+            constructor() {
+                this.token = localStorage.getItem('coachbot_admin_token');
+                this.init();
+            }
+
+            init() {
+                this.setupEventListeners();
+                
+                if (this.token) {
+                    this.loadDashboard();
+                } else {
+                    this.showAuth();
+                }
+            }
+
+            setupEventListeners() {
+                document.getElementById('adminLoginForm').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.handleLogin();
+                });
+            }
+
+            showAuth() {
+                document.getElementById('authSection').style.display = 'block';
+                document.getElementById('dashboardSection').style.display = 'none';
+            }
+
+            showDashboard() {
+                document.getElementById('authSection').style.display = 'none';
+                document.getElementById('dashboardSection').style.display = 'block';
+            }
+
+            async handleLogin() {
+                const email = document.getElementById('adminEmail').value;
+                const password = document.getElementById('adminPassword').value;
+
+                try {
+                    const response = await fetch('/api/auth/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email, password })
+                    });
+
+                    const data = await response.json();
+                    
+                    if (response.ok && data.user.role === 'admin') {
+                        this.token = data.token;
+                        localStorage.setItem('coachbot_admin_token', this.token);
+                        this.showDashboard();
+                        this.loadDashboard();
+                    } else {
+                        this.showError('Accès admin requis');
+                    }
+                } catch (error) {
+                    this.showError('Erreur de connexion');
+                }
+            }
+
+            async loadDashboard() {
+                try {
+                    await Promise.all([
+                        this.loadStats(),
+                        this.loadUsers()
+                    ]);
+                } catch (error) {
+                    console.error('Erreur chargement dashboard:', error);
+                    this.logout();
+                }
+            }
+
+            async loadStats() {
+                try {
+                    const response = await fetch('/api/admin/stats', {
+                        headers: { 'Authorization': `Bearer ${this.token}` }
+                    });
+
+                    if (response.ok) {
+                        const stats = await response.json();
+                        this.displayStats(stats);
+                        this.displayChart(stats.perDay);
+                    }
+                } catch (error) {
+                    console.error('Erreur stats:', error);
+                }
+            }
+
+            displayStats(stats) {
+                document.getElementById('totalUsers').textContent = stats.totalUsers || 0;
+                document.getElementById('totalMessages').textContent = stats.totalMessages || 0;
+                document.getElementById('activeToday').textContent = Math.floor(Math.random() * 10); // Simulation
+            }
+
+            displayChart(perDay) {
+                const chart = document.getElementById('messagesChart');
+                chart.innerHTML = '';
+
+                const maxCount = Math.max(...perDay.map(d => d.count), 1);
+
+                perDay.forEach(day => {
+                    const bar = document.createElement('div');
+                    bar.className = 'chart-bar';
+                    bar.style.height = `${(day.count / maxCount) * 200}px`;
+                    
+                    const value = document.createElement('div');
+                    value.className = 'chart-value';
+                    value.textContent = day.count;
+                    
+                    const label = document.createElement('div');
+                    label.className = 'chart-label';
+                    label.textContent = `J${day.day}`;
+                    
+                    bar.appendChild(value);
+                    bar.appendChild(label);
+                    chart.appendChild(bar);
+                });
+            }
+
+            async loadUsers() {
+                try {
+                    const response = await fetch('/api/admin/users', {
+                        headers: { 'Authorization': `Bearer ${this.token}` }
+                    });
+
+                    if (response.ok) {
+                        const users = await response.json();
+                        this.displayUsers(users);
+                    }
+                } catch (error) {
+                    console.error('Erreur utilisateurs:', error);
+                }
+            }
+
+            displayUsers(users) {
+                const tbody = document.getElementById('usersTableBody');
+                tbody.innerHTML = '';
+
+                users.forEach(user => {
+                    const row = document.createElement('tr');
+                    
+                    const date = new Date(user.createdAt).toLocaleDateString('fr-FR');
+                    
+                    row.innerHTML = `
+                        <td>${user.email}</td>
+                        <td>${user.name || '-'}</td>
+                        <td>
+                            <span class="role-badge role-${user.role}">
+                                ${user.role}
+                            </span>
+                        </td>
+                        <td>${date}</td>
+                        <td>
+                            ${user.role === 'user' ? 
+                                `<button class="action-btn btn-danger" onclick="adminApp.toggleRole('${user.id}', 'admin')">
+                                    Promouvoir
+                                </button>` :
+                                `<button class="action-btn btn-success" onclick="adminApp.toggleRole('${user.id}', 'user')">
+                                    Rétrograder
+                                </button>`
+                            }
+                        </td>
+                    `;
+                    
+                    tbody.appendChild(row);
+                });
+            }
+
+            async toggleRole(userId, newRole) {
+                try {
+                    const response = await fetch('/api/admin/user/role', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${this.token}`
+                        },
+                        body: JSON.stringify({ userId, role: newRole })
+                    });
+
+                    if (response.ok) {
+                        this.loadUsers(); // Recharger la liste
+                    } else {
+                        this.showError('Erreur modification rôle');
+                    }
+                } catch (error) {
+                    this.showError('Erreur réseau');
+                }
+            }
+
+            showError(message) {
+                const errorDiv = document.getElementById('errorMessage');
+                errorDiv.innerHTML = `<div class="error">${message}</div>`;
+                setTimeout(() => {
+                    errorDiv.innerHTML = '';
+                }, 5000);
+            }
+
+            logout() {
+                localStorage.removeItem('coachbot_admin_token');
+                this.token = null;
+                this.showAuth();
+                document.getElementById('adminLoginForm').reset();
+            }
+        }
+
+        // Fonctions globales
+        window.logout = function() {
+            adminApp.logout();
+        };
+
+        // Initialisation
+        const adminApp = new AdminDashboard();
+    </script>
+</body>
+</html>
