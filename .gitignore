@@ -1,0 +1,17 @@
+.env
+node_modules/
+data/
+*.sqlite
+users.json
+journal.json
+meta.json
+logs/
+*.log
+.cache/
+dist/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.backup
+*.bak
