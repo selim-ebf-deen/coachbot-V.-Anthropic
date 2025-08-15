@@ -1,4 +1,4 @@
-// CoachBot Frontend - Version corrigée avec fonctions globales
+// CoachBot Frontend - Version complète avec contexte et accueil automatique
 class CoachBot {
     constructor() {
         this.token = localStorage.getItem('coachbot_token');
@@ -141,7 +141,7 @@ class CoachBot {
                 this.user = data.user;
                 this.showApp();
                 this.updateUserInfo();
-                this.showWelcomeMessage();
+                this.loadChatHistory(); // Ceci affichera automatiquement le message d'accueil
             } else {
                 this.showError(data.error || 'Erreur d\'inscription');
             }
@@ -185,29 +185,13 @@ class CoachBot {
     }
 
     showWelcomeMessage() {
-        const welcomeMessages = [
-            "Assalamu alaykum et bienvenue sur CoachBot ! 🤲🏻",
-            "Je suis ravi de t'accompagner dans ton parcours de 15 jours. Ensemble, nous allons transformer tes défis en opportunités.",
-            "Commençons par faire connaissance : comment t'appelles-tu et quel est ton objectif principal pour ces 15 jours ?"
-        ];
+        const welcomeMessage = {
+            role: 'ai',
+            message: `Assalamu alaykum ! 🤲🏻\n\nJe suis CoachBot, ton coach personnel pour 15 jours de transformation.\n\nPour commencer, peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites progresser ?\n\nQu'Allah facilite notre échange.`,
+            date: new Date().toISOString()
+        };
         
-        this.displayMultipleBubbles(welcomeMessages);
-    }
-
-    async displayMultipleBubbles(messages) {
-        for (let i = 0; i < messages.length; i++) {
-            if (i > 0) await this.sleep(1000); // Délai entre bulles
-            
-            const aiMessage = {
-                role: 'ai',
-                message: '',
-                date: new Date().toISOString()
-            };
-            this.addMessageToChat(aiMessage, false);
-            this.currentStreamingMessage = document.querySelector('.message:last-child .message-content');
-            
-            await this.typeMessage(messages[i], false);
-        }
+        this.addMessageToChat(welcomeMessage, false);
     }
 
     async loadChatHistory() {
@@ -220,7 +204,14 @@ class CoachBot {
 
             if (response.ok) {
                 const messages = await response.json();
-                this.displayMessages(messages);
+                
+                // Si pas de messages, afficher le message d'accueil automatiquement
+                if (messages.length === 0) {
+                    this.showWelcomeMessage();
+                } else {
+                    this.displayMessages(messages);
+                }
+                
                 this.updateDayInfo();
             }
         } catch (error) {
@@ -354,9 +345,15 @@ class CoachBot {
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             
-            let fullResponse = '';
-            let currentBubbleText = '';
-            let isFirstBubble = true;
+            // Message IA temporaire
+            const aiMessage = {
+                role: 'ai',
+                message: '',
+                date: new Date().toISOString()
+            };
+            
+            this.addMessageToChat(aiMessage, false);
+            const lastMessage = document.querySelector('.message:last-child .message-content');
             
             while (true) {
                 const { done, value } = await reader.read();
@@ -373,25 +370,9 @@ class CoachBot {
                         try {
                             const parsed = JSON.parse(data);
                             if (parsed.text) {
-                                fullResponse += parsed.text;
-                                currentBubbleText += parsed.text;
-                                
-                                // Diviser en bulles sur les retours à la ligne doubles
-                                if (currentBubbleText.includes('\n\n')) {
-                                    const parts = currentBubbleText.split('\n\n');
-                                    const completeBubble = parts[0];
-                                    currentBubbleText = parts.slice(1).join('\n\n');
-                                    
-                                    if (isFirstBubble) {
-                                        await this.typeMessage(completeBubble, true);
-                                        isFirstBubble = false;
-                                    } else {
-                                        await this.addNewBubbleWithTyping(completeBubble);
-                                    }
-                                } else if (isFirstBubble) {
-                                    // Première bulle, mise à jour en temps réel
-                                    await this.updateStreamingMessage(currentBubbleText);
-                                }
+                                aiMessage.message += parsed.text;
+                                lastMessage.innerHTML = this.formatMessage(aiMessage.message);
+                                this.scrollToBottom();
                             }
                             if (parsed.error) {
                                 throw new Error(parsed.error);
@@ -403,80 +384,10 @@ class CoachBot {
                 }
             }
             
-            // Terminer la dernière bulle
-            if (currentBubbleText.trim()) {
-                if (isFirstBubble) {
-                    await this.typeMessage(currentBubbleText, true);
-                } else {
-                    await this.addNewBubbleWithTyping(currentBubbleText);
-                }
-            }
-            
         } catch (error) {
             console.error('Erreur streaming:', error);
             this.showError('Erreur de communication avec l\'IA');
         }
-    }
-
-    async typeMessage(text, isFirst = false) {
-        if (isFirst) {
-            // Créer la première bulle
-            const aiMessage = {
-                role: 'ai',
-                message: '',
-                date: new Date().toISOString()
-            };
-            this.addMessageToChat(aiMessage, false);
-            this.currentStreamingMessage = document.querySelector('.message:last-child .message-content');
-        }
-
-        // Effet de frappe
-        let displayedText = '';
-        for (let i = 0; i < text.length; i++) {
-            displayedText += text[i];
-            this.currentStreamingMessage.innerHTML = this.formatMessage(displayedText);
-            this.scrollToBottom();
-            
-            // Vitesse variable selon le caractère
-            let delay = this.typingSpeed;
-            if (text[i] === '.' || text[i] === '!' || text[i] === '?') {
-                delay = this.typingSpeed * 8; // Pause après ponctuation
-            } else if (text[i] === ',') {
-                delay = this.typingSpeed * 3; // Pause après virgule
-            } else if (text[i] === ' ') {
-                delay = this.typingSpeed * 0.5; // Espaces plus rapides
-            }
-            
-            await this.sleep(delay);
-        }
-    }
-
-    async updateStreamingMessage(text) {
-        if (this.currentStreamingMessage) {
-            this.currentStreamingMessage.innerHTML = this.formatMessage(text);
-            this.scrollToBottom();
-        }
-    }
-
-    async addNewBubbleWithTyping(text) {
-        // Ajouter un délai avant la nouvelle bulle
-        await this.sleep(800);
-        
-        // Créer nouvelle bulle
-        const aiMessage = {
-            role: 'ai',
-            message: '',
-            date: new Date().toISOString()
-        };
-        this.addMessageToChat(aiMessage, false);
-        this.currentStreamingMessage = document.querySelector('.message:last-child .message-content');
-        
-        // Effet de frappe pour cette bulle
-        await this.typeMessage(text, false);
-    }
-
-    sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     setLoading(loading) {
