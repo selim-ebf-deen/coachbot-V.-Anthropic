@@ -1,4 +1,4 @@
-// CoachBot v2.0 - Serveur complet optimisé
+// CoachBot v2.0 - Serveur complet optimisé avec contexte
 import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
@@ -19,7 +19,8 @@ const __dirname = path.dirname(__filename);
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, max: 100,
-  message: "Trop de requêtes, réessayez plus tard."
+  message: "Trop de requêtes, réessayez plus tard.",
+  trustProxy: true
 });
 
 app.use(limiter);
@@ -27,9 +28,9 @@ app.use(cors());
 app.use(bodyParser.json({ limit: "1mb" }));
 
 // Configuration
-const USERS_PATH = process.env.USERS_PATH || "/data/users.json";
-const JOURNAL_PATH = process.env.JOURNAL_PATH || "/data/journal.json";
-const META_PATH = process.env.META_PATH || "/data/meta.json";
+const USERS_PATH = process.env.USERS_PATH || "./users.json";
+const JOURNAL_PATH = process.env.JOURNAL_PATH || "./journal.json";
+const META_PATH = process.env.META_PATH || "./meta.json";
 const PROMPT_PATH = process.env.PROMPT_PATH || path.join(__dirname, "prompt.txt");
 const JWT_SECRET = process.env.JWT_SECRET || "change_me_now";
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022";
@@ -55,7 +56,7 @@ function saveJSON(p, obj) {
 
 function getPromptText() {
   try { return fs.readFileSync(PROMPT_PATH, "utf-8"); } 
-  catch { return "Tu es CoachBot, un coach personnel bienveillant et orienté résultats."; }
+  catch { return "Tu es CoachBot 🤲🏻, un coach personnel bienveillant et orienté résultats."; }
 }
 
 // Data management
@@ -293,12 +294,7 @@ function systemPrompt(name, disc) {
   return base + note;
 }
 
-function makeUserPrompt(day, message) {
-  const plan = plans[Number(day)] || "Plan non spécifié.";
-  return `Plan du jour (${day}) : ${plan}\n\nMessage de l'utilisateur : ${message}`;
-}
-
-// Chat streaming
+// Chat streaming AVEC CONTEXTE
 app.post("/api/chat/stream", authMiddleware, async (req, res) => {
   const { message, day = 1, provider = "anthropic" } = req.body ?? {};
   const meta0 = getMeta(req.user.sub);
@@ -316,8 +312,25 @@ app.post("/api/chat/stream", authMiddleware, async (req, res) => {
   addEntry(req.user.sub, day, { role: "user", message, date: new Date().toISOString() });
 
   const meta = getMeta(req.user.sub);
+  
+  // RÉCUPÉRER TOUT L'HISTORIQUE DU JOUR pour donner le contexte à l'IA
+  const chatHistory = getEntries(req.user.sub, day);
+  
   const system = systemPrompt(meta.name, meta.disc);
-  const user = makeUserPrompt(day, message);
+  
+  // CONSTRUIRE LE CONTEXTE COMPLET
+  let conversationContext = `Plan du jour (${day}) : ${plans[Number(day)] || "Plan non spécifié."}\n\n`;
+  
+  // Ajouter l'historique des messages du jour
+  if (chatHistory.length > 1) { // Plus d'un message = il y a de l'historique
+    conversationContext += "Historique de la conversation d'aujourd'hui :\n";
+    chatHistory.slice(0, -1).forEach(entry => { // Tous sauf le dernier (qui est le message actuel)
+      conversationContext += `${entry.role === 'user' ? 'Utilisateur' : 'Assistant'}: ${entry.message}\n`;
+    });
+    conversationContext += "\n";
+  }
+  
+  conversationContext += `Message actuel de l'utilisateur : ${message}`;
 
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
@@ -347,7 +360,7 @@ app.post("/api/chat/stream", authMiddleware, async (req, res) => {
           temperature: 0.4,
           stream: true,
           system,
-          messages: [{ role: "user", content: user }]
+          messages: [{ role: "user", content: conversationContext }] // CONTEXTE COMPLET
         })
       });
 
