@@ -1,4 +1,4 @@
-// CoachBot Frontend - Version complète avec contexte et accueil retardé
+// CoachBot Frontend - Version complète avec effet de frappe pour l'accueil
 class CoachBot {
     constructor() {
         this.token = localStorage.getItem('coachbot_token');
@@ -141,7 +141,7 @@ class CoachBot {
                 this.user = data.user;
                 this.showApp();
                 this.updateUserInfo();
-                this.loadChatHistory(); // Ceci affichera automatiquement le message d'accueil avec délai
+                this.loadChatHistory(); // Ceci affichera automatiquement le message d'accueil avec délai et effet de frappe
             } else {
                 this.showError(data.error || 'Erreur d\'inscription');
             }
@@ -184,14 +184,63 @@ class CoachBot {
         avatar.textContent = initial;
     }
 
-    showWelcomeMessage() {
+    async showWelcomeMessage() {
+        // Créer le message vide d'abord
         const welcomeMessage = {
             role: 'ai',
-            message: `Assalamu alaykum ! 🤲🏻\n\nJe suis CoachBot, ton coach personnel pour 15 jours de transformation.\n\nPour commencer, peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites progresser ?`,
+            message: '',
             date: new Date().toISOString()
         };
         
         this.addMessageToChat(welcomeMessage, false);
+        this.currentStreamingMessage = document.querySelector('.message:last-child .message-content');
+        
+        // Texte à taper
+        const welcomeText = `Assalamu alaykum ! 🤲🏻
+
+Je suis CoachBot, ton coach personnel pour 15 jours de transformation.
+
+Pour commencer, peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites progresser ?`;
+        
+        // Effet de frappe
+        await this.typeMessage(welcomeText, false);
+    }
+
+    async typeMessage(text, isFirst = false) {
+        if (isFirst) {
+            // Créer la première bulle
+            const aiMessage = {
+                role: 'ai',
+                message: '',
+                date: new Date().toISOString()
+            };
+            this.addMessageToChat(aiMessage, false);
+            this.currentStreamingMessage = document.querySelector('.message:last-child .message-content');
+        }
+
+        // Effet de frappe
+        let displayedText = '';
+        for (let i = 0; i < text.length; i++) {
+            displayedText += text[i];
+            this.currentStreamingMessage.innerHTML = this.formatMessage(displayedText);
+            this.scrollToBottom();
+            
+            // Vitesse variable selon le caractère
+            let delay = this.typingSpeed;
+            if (text[i] === '.' || text[i] === '!' || text[i] === '?') {
+                delay = this.typingSpeed * 8; // Pause après ponctuation
+            } else if (text[i] === ',') {
+                delay = this.typingSpeed * 3; // Pause après virgule
+            } else if (text[i] === ' ') {
+                delay = this.typingSpeed * 0.5; // Espaces plus rapides
+            }
+            
+            await this.sleep(delay);
+        }
+    }
+
+    sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     async loadChatHistory() {
@@ -205,7 +254,7 @@ class CoachBot {
             if (response.ok) {
                 const messages = await response.json();
                 
-                // Si pas de messages, afficher le message d'accueil après 2 secondes
+                // Si pas de messages, afficher le message d'accueil après 2 secondes avec effet de frappe
                 if (messages.length === 0) {
                     setTimeout(() => {
                         this.showWelcomeMessage();
