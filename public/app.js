@@ -1,4 +1,4 @@
-// CoachBot Frontend - Version complète avec contexte et accueil automatique
+// CoachBot Frontend - Version complète avec contexte et accueil retardé
 class CoachBot {
     constructor() {
         this.token = localStorage.getItem('coachbot_token');
@@ -141,7 +141,7 @@ class CoachBot {
                 this.user = data.user;
                 this.showApp();
                 this.updateUserInfo();
-                this.loadChatHistory(); // Ceci affichera automatiquement le message d'accueil
+                this.loadChatHistory(); // Ceci affichera automatiquement le message d'accueil avec délai
             } else {
                 this.showError(data.error || 'Erreur d\'inscription');
             }
@@ -187,7 +187,7 @@ class CoachBot {
     showWelcomeMessage() {
         const welcomeMessage = {
             role: 'ai',
-            message: `Assalamu alaykum ! 🤲🏻\n\nJe suis CoachBot, ton coach personnel pour 15 jours de transformation.\n\nPour commencer, peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites progresser ?\n\nQu'Allah facilite notre échange.`,
+            message: `Assalamu alaykum ! 🤲🏻\n\nJe suis CoachBot, ton coach personnel pour 15 jours de transformation.\n\nPour commencer, peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites progresser ?`,
             date: new Date().toISOString()
         };
         
@@ -205,9 +205,11 @@ class CoachBot {
             if (response.ok) {
                 const messages = await response.json();
                 
-                // Si pas de messages, afficher le message d'accueil automatiquement
+                // Si pas de messages, afficher le message d'accueil après 2 secondes
                 if (messages.length === 0) {
-                    this.showWelcomeMessage();
+                    setTimeout(() => {
+                        this.showWelcomeMessage();
+                    }, 2000); // Délai de 2 secondes
                 } else {
                     this.displayMessages(messages);
                 }
