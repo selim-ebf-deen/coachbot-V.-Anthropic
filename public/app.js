@@ -1,4 +1,4 @@
-// CoachBot Frontend - Version complète avec effet de frappe pour l'accueil
+// CoachBot Frontend - Version complète corrigée
 class CoachBot {
     constructor() {
         this.token = localStorage.getItem('coachbot_token');
@@ -184,35 +184,23 @@ class CoachBot {
         avatar.textContent = initial;
     }
 
-async showWelcomeMessage() {
-    // Créer le message vide d'abord
-    const welcomeMessage = {
-        role: 'ai',
-        message: '',
-        date: new Date().toISOString()
-    };
-    
-    this.addMessageToChat(welcomeMessage, false);
-    this.currentStreamingMessage = document.querySelector('.message:last-child .message-content');
-    
-    // Texte d'accueil simple et direct
-    const welcomeText = `Assalamu alaykum ! 🤲🏻
-
-Je suis CoachBot, ton coach personnel pour 15 jours de transformation.
-
-Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites progresser ?`;
-    
-    // Effet de frappe
-    await this.typeMessage(welcomeText, false);
-}
+    async showWelcomeMessage() {
+        // Créer le message vide d'abord
+        const welcomeMessage = {
+            role: 'ai',
+            message: '',
+            date: new Date().toISOString()
+        };
+        
+        this.addMessageToChat(welcomeMessage, false);
         this.currentStreamingMessage = document.querySelector('.message:last-child .message-content');
         
-        // Texte à taper
+        // Texte d'accueil simple et direct
         const welcomeText = `Assalamu alaykum ! 🤲🏻
 
 Je suis CoachBot, ton coach personnel pour 15 jours de transformation.
 
-Pour commencer, peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites progresser ?`;
+Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites progresser ?`;
         
         // Effet de frappe
         await this.typeMessage(welcomeText, false);
@@ -234,8 +222,10 @@ Pour commencer, peux-tu me dire ton prénom et l'objectif principal sur lequel t
         let displayedText = '';
         for (let i = 0; i < text.length; i++) {
             displayedText += text[i];
-            this.currentStreamingMessage.innerHTML = this.formatMessage(displayedText);
-            this.scrollToBottom();
+            if (this.currentStreamingMessage) {
+                this.currentStreamingMessage.innerHTML = this.formatMessage(displayedText);
+                this.scrollToBottom();
+            }
             
             // Vitesse variable selon le caractère
             let delay = this.typingSpeed;
