@@ -830,11 +830,11 @@
             localStorage.setItem('coachbot_onboarding', JSON.stringify(userData));
             localStorage.setItem('coachbot_onboarding_completed', 'true');
             
-            // Rediriger vers l'application principale
-            alert(`Parfait ${userData.prenom || 'mon frère/ma sœur'} ! 🤲🏻\n\nTon profil est sauvegardé. Tu vas maintenant accéder à ton programme personnalisé.\n\nQu'Allah bénisse ton parcours de transformation ! ✨`);
+            // Message corrigé
+            alert(`Barak Allahu fik ${userData.prenom || 'mon frère/ma sœur'} ! 🤲🏻\n\nTon profil est sauvegardé. Tu vas maintenant accéder à ton programme personnalisé.\n\nQu'Allah bénisse ton parcours de transformation ! ✨`);
             
             // Redirection vers l'app principale
-            window.location.href = '/'; // ou le chemin vers ton app principale
+            window.location.href = '/';
         }
 
         // Gestion des options radio
