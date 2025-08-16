@@ -806,4 +806,90 @@
                     break;
                 case 5:
                     userData.style = document.querySelector('input[name="style"]:checked')?.value;
-                    userData.moment
+                    userData.momentOptimal = document.getElementById('moment-optimal').value;
+                    userData.duree = document.querySelector('input[name="duree"]:checked')?.value;
+                    break;
+            }
+        }
+
+        function updateScaleValue(sliderId, valueId) {
+            const slider = document.getElementById(sliderId);
+            const valueDisplay = document.getElementById(valueId);
+            valueDisplay.textContent = slider.value;
+        }
+
+        function skipOnboarding() {
+            if (confirm('Es-tu sûr de vouloir passer l\'introduction ? Tu peux toujours y revenir plus tard.')) {
+                startCoaching();
+            }
+        }
+
+        function startCoaching() {
+            // Sauvegarder les données utilisateur
+            saveCurrentStepData();
+            localStorage.setItem('coachbot_onboarding', JSON.stringify(userData));
+            localStorage.setItem('coachbot_onboarding_completed', 'true');
+            
+            // Rediriger vers l'application principale
+            alert(`Parfait ${userData.prenom || 'mon frère/ma sœur'} ! 🤲🏻\n\nTon profil est sauvegardé. Tu vas maintenant accéder à ton programme personnalisé.\n\nQu'Allah bénisse ton parcours de transformation ! ✨`);
+            
+            // Redirection vers l'app principale
+            window.location.href = '/'; // ou le chemin vers ton app principale
+        }
+
+        // Gestion des options radio
+        document.addEventListener('DOMContentLoaded', function() {
+            // Radio buttons styling
+            document.querySelectorAll('.radio-option').forEach(option => {
+                option.addEventListener('click', function() {
+                    const input = this.querySelector('input[type="radio"]');
+                    const name = input.name;
+                    
+                    // Remove selected class from all options with same name
+                    document.querySelectorAll(`input[name="${name}"]`).forEach(radio => {
+                        radio.closest('.radio-option').classList.remove('selected');
+                    });
+                    
+                    // Add selected class to clicked option
+                    this.classList.add('selected');
+                    input.checked = true;
+                });
+            });
+
+            // Initialize progress
+            updateProgress();
+        });
+
+        // Sauvegarde automatique des données
+        function autoSave() {
+            const tempData = {
+                step: currentStep,
+                prenom: document.getElementById('prenom')?.value || '',
+                age: document.getElementById('age')?.value || '',
+                timezone: document.getElementById('timezone')?.value || '',
+                objectifDetail: document.getElementById('objectif-detail')?.value || '',
+                motivation: document.getElementById('motivation')?.value || ''
+            };
+            localStorage.setItem('coachbot_onboarding_temp', JSON.stringify(tempData));
+        }
+
+        // Restaurer les données si reload de page
+        function restoreData() {
+            const tempData = localStorage.getItem('coachbot_onboarding_temp');
+            if (tempData) {
+                const data = JSON.parse(tempData);
+                if (data.prenom) document.getElementById('prenom').value = data.prenom;
+                if (data.age) document.getElementById('age').value = data.age;
+                if (data.timezone) document.getElementById('timezone').value = data.timezone;
+            }
+        }
+
+        // Auto-save on input change
+        document.addEventListener('input', autoSave);
+        document.addEventListener('change', autoSave);
+
+        // Restore on page load
+        window.addEventListener('load', restoreData);
+    </script>
+</body>
+</html>
