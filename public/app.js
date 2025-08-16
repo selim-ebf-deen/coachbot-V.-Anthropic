@@ -1,4 +1,4 @@
-// CoachBot Frontend - Version complète corrigée
+// CoachBot Frontend - Version complète avec accès admin
 class CoachBot {
     constructor() {
         this.token = localStorage.getItem('coachbot_token');
@@ -61,6 +61,13 @@ class CoachBot {
             btn.className = 'day-btn';
             btn.textContent = `J${i}`;
             btn.onclick = () => this.switchDay(i);
+            
+            // Ajouter indicateur visuel pour admin
+            if (this.user?.role === 'admin') {
+                btn.classList.add('admin-access');
+                btn.title = `Jour ${i} (Accès Admin)`;
+            }
+            
             nav.appendChild(btn);
         }
         
@@ -141,7 +148,7 @@ class CoachBot {
                 this.user = data.user;
                 this.showApp();
                 this.updateUserInfo();
-                this.loadChatHistory(); // Ceci affichera automatiquement le message d'accueil avec délai et effet de frappe
+                this.loadChatHistory();
             } else {
                 this.showError(data.error || 'Erreur d\'inscription');
             }
@@ -182,6 +189,66 @@ class CoachBot {
         const avatar = document.getElementById('userAvatar');
         const initial = (this.user.name || this.user.email || 'U')[0].toUpperCase();
         avatar.textContent = initial;
+        
+        // Ajouter style admin si applicable
+        if (this.user.role === 'admin') {
+            this.addAdminStyles();
+            this.generateDaysNav(); // Régénérer avec les styles admin
+        }
+    }
+
+    addAdminStyles() {
+        // Ajouter CSS admin si pas déjà présent
+        if (!document.getElementById('admin-styles')) {
+            const style = document.createElement('style');
+            style.id = 'admin-styles';
+            style.textContent = `
+                .day-btn.admin-access {
+                    border: 2px solid #ffd700 !important;
+                    position: relative;
+                    box-shadow: 0 0 10px rgba(255, 215, 0, 0.3) !important;
+                }
+                
+                .day-btn.admin-access::after {
+                    content: '👑';
+                    position: absolute;
+                    top: -8px;
+                    right: -8px;
+                    font-size: 14px;
+                    background: white;
+                    border-radius: 50%;
+                    width: 20px;
+                    height: 20px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+                
+                .user-info.admin {
+                    border: 2px solid #ffd700;
+                    background: linear-gradient(135deg, rgba(255, 215, 0, 0.1) 0%, rgba(255, 193, 7, 0.1) 100%);
+                }
+            `;
+            document.head.appendChild(style);
+            
+            // Ajouter classe admin à l'info utilisateur
+            const userInfo = document.querySelector('.user-info');
+            if (userInfo) {
+                userInfo.classList.add('admin');
+            }
+        }
+    }
+
+    canAccessDay(day) {
+        // Admin a toujours accès
+        if (this.user?.role === 'admin') {
+            return true;
+        }
+        
+        // Pour les utilisateurs normaux
+        // TODO: Implémenter la logique de progression
+        // Pour l'instant, accès libre
+        return true;
     }
 
     async showWelcomeMessage() {
@@ -459,6 +526,12 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
 
     switchDay(day) {
         if (day === this.currentDay || this.isLoading) return;
+        
+        // Admin a accès à tous les jours
+        if (this.user?.role !== 'admin') {
+            // TODO: Logique de progression pour users normaux
+            // Pour l'instant, accès libre
+        }
         
         this.currentDay = day;
         this.updateDayNavigation();
