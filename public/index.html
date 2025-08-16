@@ -72,6 +72,7 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
+            flex-wrap: wrap;
         }
 
         .admin-badge {
@@ -81,6 +82,35 @@
             border-radius: 12px;
             font-size: 12px;
             font-weight: bold;
+        }
+
+        .onboarding-badge {
+            background: #28a745;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 5px;
+        }
+
+        .settings-btn {
+            background: rgba(255,255,255,0.1);
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-bottom: 20px;
+            font-size: 14px;
+            transition: background 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .settings-btn:hover {
+            background: rgba(255,255,255,0.2);
         }
 
         .days-nav {
@@ -403,6 +433,11 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
         /* Mobile Responsive */
         @media (max-width: 768px) {
             .app-container {
@@ -469,6 +504,10 @@
                     <span class="user-name">Connexion...</span>
                 </div>
             </div>
+
+            <button class="settings-btn" onclick="coachBot.showSettings()">
+                ⚙️ Paramètres
+            </button>
 
             <div id="daysNav" class="days-nav">
                 <!-- Généré dynamiquement -->
