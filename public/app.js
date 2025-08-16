@@ -380,7 +380,13 @@ class CoachBot {
         } catch (error) {
             this.user = { email: email, prenom: email.split('@')[0], role: 'user' };
             this.serverMode = false;
-            this.hideAuthModal();async register() {
+            this.hideAuthModal();
+            this.updateUserInfo();
+            setTimeout(() => this.showWelcomeMessage(), 2000);
+        }
+    }
+
+    async register() {
         const email = document.getElementById('registerEmail').value;
         const password = document.getElementById('registerPassword').value;
 
@@ -800,8 +806,3 @@ style.textContent = `
     }
 `;
 document.head.appendChild(style);
-            this.updateUserInfo();
-            setTimeout(() => this.showWelcomeMessage(), 2000);
-        }
-    }
-    
