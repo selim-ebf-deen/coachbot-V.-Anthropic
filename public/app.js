@@ -1,4 +1,159 @@
-// CoachBot Frontend - Version complète avec accès admin
+// CoachBot Frontend - Version complète avec vocal
+class VoiceManager {
+    constructor(app) {
+        this.app = app;
+        this.isRecording = false;
+        this.isPlaying = false;
+        this.recognition = null;
+        this.synthesis = window.speechSynthesis;
+        this.currentUtterance = null;
+        this.init();
+    }
+
+    init() {
+        // Vérification support navigateur
+        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+            console.warn('Speech Recognition non supporté');
+            return;
+        }
+
+        // Configuration Speech Recognition
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        this.recognition = new SpeechRecognition();
+        this.recognition.lang = 'fr-FR';
+        this.recognition.continuous = false;
+        this.recognition.interimResults = false;
+
+        // Event listeners
+        this.recognition.onstart = () => this.onRecordingStart();
+        this.recognition.onresult = (event) => this.onSpeechResult(event);
+        this.recognition.onerror = (event) => this.onSpeechError(event);
+        this.recognition.onend = () => this.onRecordingEnd();
+    }
+
+    toggleRecording() {
+        if (!this.recognition) {
+            this.app.showError('Vocal non supporté sur ce navigateur');
+            return;
+        }
+
+        if (this.isRecording) {
+            this.stopRecording();
+        } else {
+            this.startRecording();
+        }
+    }
+
+    startRecording() {
+        try {
+            this.recognition.start();
+        } catch (error) {
+            this.app.showError('Erreur microphone : ' + error.message);
+        }
+    }
+
+    stopRecording() {
+        if (this.recognition && this.isRecording) {
+            this.recognition.stop();
+        }
+    }
+
+    onRecordingStart() {
+        this.isRecording = true;
+        const micBtn = document.getElementById('micBtn');
+        if (micBtn) {
+            micBtn.classList.add('recording');
+            micBtn.innerHTML = '⏹️';
+        }
+        console.log('Enregistrement démarré...');
+    }
+
+    onRecordingEnd() {
+        this.isRecording = false;
+        const micBtn = document.getElementById('micBtn');
+        if (micBtn) {
+            micBtn.classList.remove('recording');
+            micBtn.innerHTML = '🎙️';
+        }
+        console.log('Enregistrement arrêté');
+    }
+
+    onSpeechResult(event) {
+        const transcript = event.results[0][0].transcript;
+        console.log('Transcription:', transcript);
+        
+        // Insérer le texte dans le champ de saisie
+        const userInput = document.getElementById('userInput');
+        if (userInput) {
+            userInput.value = transcript;
+            userInput.focus();
+        }
+    }
+
+    onSpeechError(event) {
+        console.error('Erreur reconnaissance vocale:', event.error);
+        this.isRecording = false;
+        
+        const micBtn = document.getElementById('micBtn');
+        if (micBtn) {
+            micBtn.classList.remove('recording');
+            micBtn.innerHTML = '🎙️';
+        }
+
+        let errorMessage = 'Erreur vocal';
+        switch (event.error) {
+            case 'no-speech':
+                errorMessage = 'Aucune voix détectée';
+                break;
+            case 'audio-capture':
+                errorMessage = 'Microphone non accessible';
+                break;
+            case 'not-allowed':
+                errorMessage = 'Permission micro refusée';
+                break;
+        }
+        
+        this.app.showError(errorMessage);
+    }
+
+    speakText(text) {
+        if (this.isPlaying) {
+            this.stopSpeaking();
+            return;
+        }
+
+        // Nettoyer le texte des emojis et caractères spéciaux
+        const cleanText = text
+            .replace(/[🤲🏻✅❌🎯🛠️📋🔍💡🚀👑🌟]/g, '')
+            .replace(/\*\*(.*?)\*\*/g, '$1')
+            .replace(/\*(.*?)\*/g, '$1');
+
+        this.currentUtterance = new SpeechSynthesisUtterance(cleanText);
+        this.currentUtterance.lang = 'fr-FR';
+        this.currentUtterance.rate = 0.9;
+        this.currentUtterance.pitch = 1;
+
+        this.currentUtterance.onstart = () => {
+            this.isPlaying = true;
+        };
+
+        this.currentUtterance.onend = () => {
+            this.isPlaying = false;
+            this.currentUtterance = null;
+        };
+
+        this.synthesis.speak(this.currentUtterance);
+    }
+
+    stopSpeaking() {
+        if (this.synthesis.speaking) {
+            this.synthesis.cancel();
+        }
+        this.isPlaying = false;
+        this.currentUtterance = null;
+    }
+}
+
 class CoachBot {
     constructor() {
         this.token = localStorage.getItem('coachbot_token');
@@ -6,50 +161,44 @@ class CoachBot {
         this.user = null;
         this.isLoading = false;
         this.currentStreamingMessage = null;
-        this.typingSpeed = 30; // ms entre chaque caractère
+        this.voiceManager = new VoiceManager(this);
         this.init();
     }
 
     init() {
+        this.checkAuth();
         this.setupEventListeners();
         this.generateDaysNav();
-        
-        if (this.token) {
-            this.loadUser();
+        this.loadSettings();
+    }
+
+    checkAuth() {
+        if (!this.token) {
+            this.showAuthModal();
         } else {
-            this.showAuth();
+            this.verifyToken();
         }
     }
 
     setupEventListeners() {
-        // Auth forms
-        document.getElementById('loginFormElement').addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.handleLogin();
-        });
-
-        document.getElementById('registerFormElement').addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.handleRegister();
-        });
-
-        // Chat input
-        const chatInput = document.getElementById('chatInput');
-        chatInput.addEventListener('keydown', (e) => {
+        document.getElementById('userInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 this.sendMessage();
             }
         });
 
-        chatInput.addEventListener('input', () => {
-            this.autoResizeTextarea(chatInput);
+        document.getElementById('sendBtn').addEventListener('click', () => {
+            this.sendMessage();
         });
-    }
 
-    autoResizeTextarea(textarea) {
-        textarea.style.height = 'auto';
-        textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+        // Gestionnaire fermeture modale
+        window.onclick = (event) => {
+            const modal = document.getElementById('authModal');
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        };
     }
 
     generateDaysNav() {
@@ -62,7 +211,6 @@ class CoachBot {
             btn.textContent = `J${i}`;
             btn.onclick = () => this.switchDay(i);
             
-            // Ajouter indicateur visuel pour admin
             if (this.user?.role === 'admin') {
                 btn.classList.add('admin-access');
                 btn.title = `Jour ${i} (Accès Admin)`;
@@ -74,35 +222,91 @@ class CoachBot {
         this.updateDayNavigation();
     }
 
+    switchDay(day) {
+        if (day === this.currentDay || this.isLoading) return;
+        
+        // Admin a accès à tous les jours
+        if (this.user?.role !== 'admin') {
+            // TODO: Logique de progression pour users normaux
+        }
+        
+        this.currentDay = day;
+        this.updateDayNavigation();
+        this.updateDayInfo();
+        this.loadChatHistory();
+    }
+
     updateDayNavigation() {
         document.querySelectorAll('.day-btn').forEach((btn, index) => {
             btn.classList.toggle('active', index + 1 === this.currentDay);
         });
     }
 
-    showAuth() {
-        document.getElementById('authSection').style.display = 'block';
-        document.getElementById('appSection').style.display = 'none';
+    updateDayInfo() {
+        const dayInfo = document.getElementById('dayInfo');
+        dayInfo.textContent = `Jour ${this.currentDay} - Transformation`;
     }
 
-    showApp() {
-        document.getElementById('authSection').style.display = 'none';
-        document.getElementById('appSection').style.display = 'flex';
+    async verifyToken() {
+        try {
+            const response = await fetch('/api/user/profile', {
+                headers: { 'Authorization': `Bearer ${this.token}` }
+            });
+
+            if (response.ok) {
+                this.user = await response.json();
+                this.updateUserInfo();
+                this.loadChatHistory();
+                setTimeout(() => this.showWelcomeMessage(), 2000);
+            } else {
+                this.logout();
+            }
+        } catch (error) {
+            console.error('Erreur vérification token:', error);
+            this.logout();
+        }
     }
 
-    showLogin() {
-        document.getElementById('loginForm').classList.add('active');
-        document.getElementById('registerForm').classList.remove('active');
+    updateUserInfo() {
+        const userInfo = document.getElementById('userInfo');
+        if (this.user) {
+            userInfo.innerHTML = `
+                <div class="user-details ${this.user.role === 'admin' ? 'admin' : ''}">
+                    <span class="user-name">${this.user.prenom || this.user.email}</span>
+                    ${this.user.role === 'admin' ? '<span class="admin-badge">👑 Admin</span>' : ''}
+                </div>
+            `;
+        }
+    }
+
+    showAuthModal() {
+        document.getElementById('authModal').style.display = 'flex';
+        document.getElementById('loginForm').style.display = 'block';
+        document.getElementById('registerForm').style.display = 'none';
+    }
+
+    hideAuthModal() {
+        document.getElementById('authModal').style.display = 'none';
     }
 
     showRegister() {
-        document.getElementById('loginForm').classList.remove('active');
-        document.getElementById('registerForm').classList.add('active');
+        document.getElementById('loginForm').style.display = 'none';
+        document.getElementById('registerForm').style.display = 'block';
     }
 
-    async handleLogin() {
+    showLogin() {
+        document.getElementById('registerForm').style.display = 'none';
+        document.getElementById('loginForm').style.display = 'block';
+    }
+
+    async login() {
         const email = document.getElementById('loginEmail').value;
         const password = document.getElementById('loginPassword').value;
+
+        if (!email || !password) {
+            this.showError('Email et mot de passe requis');
+            return;
+        }
 
         try {
             const response = await fetch('/api/auth/login', {
@@ -112,143 +316,55 @@ class CoachBot {
             });
 
             const data = await response.json();
-            
+
             if (response.ok) {
                 this.token = data.token;
                 localStorage.setItem('coachbot_token', this.token);
                 this.user = data.user;
-                this.showApp();
+                this.hideAuthModal();
                 this.updateUserInfo();
                 this.loadChatHistory();
+                setTimeout(() => this.showWelcomeMessage(), 2000);
             } else {
-                this.showError(data.error || 'Erreur de connexion');
+                this.showError(data.message || 'Erreur de connexion');
             }
         } catch (error) {
-            this.showError('Erreur réseau');
+            this.showError('Erreur de connexion');
         }
     }
 
-    async handleRegister() {
-        const name = document.getElementById('registerName').value;
+    async register() {
         const email = document.getElementById('registerEmail').value;
         const password = document.getElementById('registerPassword').value;
+
+        if (!email || !password) {
+            this.showError('Email et mot de passe requis');
+            return;
+        }
 
         try {
             const response = await fetch('/api/auth/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, email, password })
+                body: JSON.stringify({ email, password })
             });
 
             const data = await response.json();
-            
+
             if (response.ok) {
                 this.token = data.token;
                 localStorage.setItem('coachbot_token', this.token);
                 this.user = data.user;
-                this.showApp();
+                this.hideAuthModal();
                 this.updateUserInfo();
                 this.loadChatHistory();
+                setTimeout(() => this.showWelcomeMessage(), 2000);
             } else {
-                this.showError(data.error || 'Erreur d\'inscription');
+                this.showError(data.message || 'Erreur d\'inscription');
             }
         } catch (error) {
-            this.showError('Erreur réseau');
+            this.showError('Erreur d\'inscription');
         }
-    }
-
-    async loadUser() {
-        try {
-            const response = await fetch('/api/me', {
-                headers: {
-                    'Authorization': `Bearer ${this.token}`
-                }
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                this.user = data.user;
-                this.showApp();
-                this.updateUserInfo();
-                this.loadChatHistory();
-            } else {
-                this.logout();
-            }
-        } catch (error) {
-            this.logout();
-        }
-    }
-
-    updateUserInfo() {
-        if (!this.user) return;
-        
-        document.getElementById('userName').textContent = this.user.name || 'Utilisateur';
-        document.getElementById('userEmail').textContent = this.user.email;
-        
-        // Avatar avec initiale
-        const avatar = document.getElementById('userAvatar');
-        const initial = (this.user.name || this.user.email || 'U')[0].toUpperCase();
-        avatar.textContent = initial;
-        
-        // Ajouter style admin si applicable
-        if (this.user.role === 'admin') {
-            this.addAdminStyles();
-            this.generateDaysNav(); // Régénérer avec les styles admin
-        }
-    }
-
-    addAdminStyles() {
-        // Ajouter CSS admin si pas déjà présent
-        if (!document.getElementById('admin-styles')) {
-            const style = document.createElement('style');
-            style.id = 'admin-styles';
-            style.textContent = `
-                .day-btn.admin-access {
-                    border: 2px solid #ffd700 !important;
-                    position: relative;
-                    box-shadow: 0 0 10px rgba(255, 215, 0, 0.3) !important;
-                }
-                
-                .day-btn.admin-access::after {
-                    content: '👑';
-                    position: absolute;
-                    top: -8px;
-                    right: -8px;
-                    font-size: 14px;
-                    background: white;
-                    border-radius: 50%;
-                    width: 20px;
-                    height: 20px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                }
-                
-                .user-info.admin {
-                    border: 2px solid #ffd700;
-                    background: linear-gradient(135deg, rgba(255, 215, 0, 0.1) 0%, rgba(255, 193, 7, 0.1) 100%);
-                }
-            `;
-            document.head.appendChild(style);
-            
-            // Ajouter classe admin à l'info utilisateur
-            const userInfo = document.querySelector('.user-info');
-            if (userInfo) {
-                userInfo.classList.add('admin');
-            }
-        }
-    }
-
-    canAccessDay(day) {
-        // Admin a toujours accès
-        if (this.user?.role === 'admin') {
-            return true;
-        }
-        
-        // Pour les utilisateurs normaux
-        // TODO: Implémenter la logique de progression
-        // Pour l'instant, accès libre
-        return true;
     }
 
     async showWelcomeMessage() {
@@ -273,345 +389,256 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
         await this.typeMessage(welcomeText, false);
     }
 
-    async typeMessage(text, isFirst = false) {
-        if (isFirst) {
-            // Créer la première bulle
-            const aiMessage = {
-                role: 'ai',
-                message: '',
-                date: new Date().toISOString()
-            };
-            this.addMessageToChat(aiMessage, false);
-            this.currentStreamingMessage = document.querySelector('.message:last-child .message-content');
-        }
-
-        // Effet de frappe
-        let displayedText = '';
-        for (let i = 0; i < text.length; i++) {
-            displayedText += text[i];
-            if (this.currentStreamingMessage) {
-                this.currentStreamingMessage.innerHTML = this.formatMessage(displayedText);
-                this.scrollToBottom();
-            }
-            
-            // Vitesse variable selon le caractère
-            let delay = this.typingSpeed;
-            if (text[i] === '.' || text[i] === '!' || text[i] === '?') {
-                delay = this.typingSpeed * 8; // Pause après ponctuation
-            } else if (text[i] === ',') {
-                delay = this.typingSpeed * 3; // Pause après virgule
-            } else if (text[i] === ' ') {
-                delay = this.typingSpeed * 0.5; // Espaces plus rapides
-            }
-            
-            await this.sleep(delay);
-        }
-    }
-
-    sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
+    logout() {
+        localStorage.removeItem('coachbot_token');
+        this.token = null;
+        this.user = null;
+        this.showAuthModal();
+        document.getElementById('chatMessages').innerHTML = '';
     }
 
     async loadChatHistory() {
         try {
-            const response = await fetch(`/api/journal?day=${this.currentDay}`, {
-                headers: {
-                    'Authorization': `Bearer ${this.token}`
-                }
+            const response = await fetch(`/api/chat/history?day=${this.currentDay}`, {
+                headers: { 'Authorization': `Bearer ${this.token}` }
             });
 
             if (response.ok) {
                 const messages = await response.json();
-                
-                // Si pas de messages, afficher le message d'accueil après 2 secondes avec effet de frappe
-                if (messages.length === 0) {
-                    setTimeout(() => {
-                        this.showWelcomeMessage();
-                    }, 2000); // Délai de 2 secondes
-                } else {
-                    this.displayMessages(messages);
-                }
-                
-                this.updateDayInfo();
+                this.displayChatHistory(messages);
             }
         } catch (error) {
             console.error('Erreur chargement historique:', error);
         }
     }
 
-    displayMessages(messages) {
-        const container = document.getElementById('chatMessages');
-        container.innerHTML = '';
-        
+    displayChatHistory(messages) {
+        const chatMessages = document.getElementById('chatMessages');
+        chatMessages.innerHTML = '';
+
         messages.forEach(msg => {
-            this.addMessageToChat(msg, false);
+            this.addMessageToChat(msg, false, false);
         });
-        
+
         this.scrollToBottom();
-    }
-
-    addMessageToChat(message, save = true) {
-        const container = document.getElementById('chatMessages');
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${message.role}`;
-        
-        // Animation d'apparition
-        messageDiv.style.opacity = '0';
-        messageDiv.style.transform = 'translateY(20px)';
-        
-        const avatar = document.createElement('div');
-        avatar.className = 'message-avatar';
-        avatar.textContent = message.role === 'user' ? 
-            (this.user?.name?.[0] || 'U').toUpperCase() : '🤲🏻';
-        
-        const content = document.createElement('div');
-        content.className = 'message-content';
-        content.innerHTML = this.formatMessage(message.message);
-        
-        messageDiv.appendChild(avatar);
-        messageDiv.appendChild(content);
-        container.appendChild(messageDiv);
-        
-        // Animation d'entrée
-        setTimeout(() => {
-            messageDiv.style.transition = 'all 0.3s ease-out';
-            messageDiv.style.opacity = '1';
-            messageDiv.style.transform = 'translateY(0)';
-        }, 50);
-        
-        if (save && message.role === 'user') {
-            this.saveMessage(message);
-        }
-        
-        this.scrollToBottom();
-    }
-
-    formatMessage(text) {
-        return text
-            .replace(/\n\n/g, '<br><br>')
-            .replace(/\n/g, '<br>')
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\*(.*?)\*/g, '<em>$1</em>')
-            .replace(/_(.*?)_/g, '<em>$1</em>')
-            .replace(/`(.*?)`/g, '<code>$1</code>');
-    }
-
-    async saveMessage(message) {
-        try {
-            await fetch('/api/journal/save', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${this.token}`
-                },
-                body: JSON.stringify({
-                    day: this.currentDay,
-                    message: message.message,
-                    role: message.role
-                })
-            });
-        } catch (error) {
-            console.error('Erreur sauvegarde:', error);
-        }
     }
 
     async sendMessage() {
-        if (this.isLoading) return;
-        
-        const input = document.getElementById('chatInput');
+        const input = document.getElementById('userInput');
         const message = input.value.trim();
-        
-        if (!message) return;
-        
-        // Message utilisateur
+
+        if (!message || this.isLoading) return;
+
+        input.value = '';
+        this.isLoading = true;
+
+        // Ajouter message utilisateur
         const userMessage = {
             role: 'user',
             message: message,
             date: new Date().toISOString()
         };
-        
+
         this.addMessageToChat(userMessage);
-        input.value = '';
-        this.autoResizeTextarea(input);
-        
-        // État de chargement
-        this.setLoading(true);
-        
-        // Message IA en streaming
-        await this.streamAIResponse(message);
-        
-        this.setLoading(false);
+
+        // Préparer message IA vide pour streaming
+        const aiMessage = {
+            role: 'ai',
+            message: '',
+            date: new Date().toISOString()
+        };
+
+        this.addMessageToChat(aiMessage, false);
+        this.currentStreamingMessage = document.querySelector('.message:last-child .message-content');
+
+        try {
+            await this.streamAIResponse(message);
+        } catch (error) {
+            console.error('Erreur envoi message:', error);
+            this.showError('Erreur lors de l\'envoi du message');
+        }
+
+        this.isLoading = false;
     }
 
-    async streamAIResponse(message) {
+    async streamAIResponse(userMessage) {
+        const response = await fetch('/api/chat/message', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${this.token}`
+            },
+            body: JSON.stringify({
+                message: userMessage,
+                day: this.currentDay
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('Erreur serveur');
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    const data = line.slice(6);
+                    if (data === '[DONE]') {
+                        // Lecture vocale automatique de la réponse complète
+                        const finalText = this.currentStreamingMessage?.textContent;
+                        if (finalText && finalText.trim()) {
+                            setTimeout(() => {
+                                this.voiceManager.speakText(finalText);
+                            }, 500);
+                        }
+                        return;
+                    }
+
+                    try {
+                        const parsed = JSON.parse(data);
+                        if (parsed.content) {
+                            await this.typeMessage(parsed.content, true);
+                        }
+                    } catch (e) {
+                        // Ignorer erreurs parsing JSON
+                    }
+                }
+            }
+        }
+    }
+
+    async typeMessage(text, isStreaming = false) {
+        if (!this.currentStreamingMessage) return;
+
+        if (isStreaming) {
+            // Mode streaming : ajouter caractère par caractère
+            this.currentStreamingMessage.textContent += text;
+        } else {
+            // Mode typing : effet de frappe complet
+            for (let i = 0; i < text.length; i++) {
+                if (!this.currentStreamingMessage) break;
+                this.currentStreamingMessage.textContent += text[i];
+                this.scrollToBottom();
+                await new Promise(resolve => setTimeout(resolve, 20));
+            }
+        }
+        
+        this.scrollToBottom();
+    }
+
+    addMessageToChat(message, save = true, scroll = true) {
+        const chatMessages = document.getElementById('chatMessages');
+        const messageEl = document.createElement('div');
+        messageEl.className = `message ${message.role}`;
+
+        const time = new Date(message.date).toLocaleTimeString('fr-FR', {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
+        messageEl.innerHTML = `
+            <div class="message-content">${message.message}</div>
+            <div class="message-time">${time}</div>
+        `;
+
+        chatMessages.appendChild(messageEl);
+
+        if (scroll) {
+            this.scrollToBottom();
+        }
+
+        // Sauvegarder en base si nécessaire
+        if (save && this.token) {
+            this.saveMessage(message);
+        }
+    }
+
+    async saveMessage(message) {
         try {
-            const response = await fetch('/api/chat/stream', {
+            await fetch('/api/chat/save', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${this.token}`
                 },
                 body: JSON.stringify({
-                    message: message,
-                    day: this.currentDay,
-                    provider: 'anthropic'
+                    ...message,
+                    day: this.currentDay
                 })
             });
-
-            if (!response.ok) {
-                throw new Error('Erreur de streaming');
-            }
-
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            
-            // Message IA temporaire
-            const aiMessage = {
-                role: 'ai',
-                message: '',
-                date: new Date().toISOString()
-            };
-            
-            this.addMessageToChat(aiMessage, false);
-            const lastMessage = document.querySelector('.message:last-child .message-content');
-            
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                
-                const chunk = decoder.decode(value);
-                const lines = chunk.split('\n');
-                
-                for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        const data = line.slice(6);
-                        if (data === '[DONE]') break;
-                        
-                        try {
-                            const parsed = JSON.parse(data);
-                            if (parsed.text) {
-                                aiMessage.message += parsed.text;
-                                lastMessage.innerHTML = this.formatMessage(aiMessage.message);
-                                this.scrollToBottom();
-                            }
-                            if (parsed.error) {
-                                throw new Error(parsed.error);
-                            }
-                        } catch (e) {
-                            // Ignorer les lignes malformées
-                        }
-                    }
-                }
-            }
-            
         } catch (error) {
-            console.error('Erreur streaming:', error);
-            this.showError('Erreur de communication avec l\'IA');
+            console.error('Erreur sauvegarde message:', error);
         }
-    }
-
-    setLoading(loading) {
-        this.isLoading = loading;
-        const sendBtn = document.getElementById('sendBtn');
-        
-        if (loading) {
-            sendBtn.innerHTML = '<div class="loading"></div>';
-            sendBtn.disabled = true;
-        } else {
-            sendBtn.innerHTML = '➤';
-            sendBtn.disabled = false;
-            this.currentStreamingMessage = null;
-        }
-    }
-
-    switchDay(day) {
-        if (day === this.currentDay || this.isLoading) return;
-        
-        // Admin a accès à tous les jours
-        if (this.user?.role !== 'admin') {
-            // TODO: Logique de progression pour users normaux
-            // Pour l'instant, accès libre
-        }
-        
-        this.currentDay = day;
-        this.updateDayNavigation();
-        this.updateDayInfo();
-        this.loadChatHistory();
-    }
-
-    updateDayInfo() {
-        const plans = {
-            1: { title: "Clarification des intentions", desc: "Précise le défi prioritaire à résoudre en 15 jours" },
-            2: { title: "Diagnostic de situation", desc: "État des lieux, 3 leviers, 3 obstacles" },
-            3: { title: "Vision et critères", desc: "Issue idéale + 3 indicateurs mesurables" },
-            4: { title: "Valeurs et motivations", desc: "Aligne objectifs et valeurs personnelles" },
-            5: { title: "Énergie et estime", desc: "Estime de soi, amour propre, confiance" },
-            6: { title: "Renforcement confiance", desc: "Preuves, retours, micro-victoires" },
-            7: { title: "Bilan KISS", desc: "Keep-Improve-Start-Stop" },
-            8: { title: "Nouveau départ", desc: "Cap et prochaines 48h" },
-            9: { title: "Plan d'action", desc: "1 chose concrète par jour" },
-            10: { title: "Communication CNV", desc: "Préparer un message clé" },
-            11: { title: "Décisions importantes", desc: "Stop / Keep / Start" },
-            12: { title: "Responsabilité", desc: "Au-dessus de la ligne" },
-            13: { title: "Co-développement", desc: "Pairing et entraide" },
-            14: { title: "Leadership", desc: "Principes de Maxwell" },
-            15: { title: "Bilan final", desc: "Plan 30 jours suivants" }
-        };
-        
-        const plan = plans[this.currentDay] || { title: "Jour inconnu", desc: "Description non disponible" };
-        
-        document.getElementById('dayTitle').textContent = `Jour ${this.currentDay} - ${plan.title}`;
-        document.getElementById('dayDescription').textContent = plan.desc;
     }
 
     scrollToBottom() {
-        const container = document.getElementById('chatMessages');
-        setTimeout(() => {
-            container.scrollTop = container.scrollHeight;
-        }, 100);
+        const chatMessages = document.getElementById('chatMessages');
+        chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
     showError(message) {
-        // Simple alert pour les erreurs - peut être amélioré avec une notification plus jolie
-        alert(message);
+        // Créer notification d'erreur
+        const error = document.createElement('div');
+        error.className = 'error-notification';
+        error.textContent = message;
+        error.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #ff4444;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            z-index: 10000;
+            animation: slideIn 0.3s ease;
+        `;
+
+        document.body.appendChild(error);
+
+        setTimeout(() => {
+            error.remove();
+        }, 3000);
     }
 
-    logout() {
-        localStorage.removeItem('coachbot_token');
-        this.token = null;
-        this.user = null;
-        this.showAuth();
-        
-        // Reset forms
-        document.getElementById('loginFormElement').reset();
-        document.getElementById('registerFormElement').reset();
+    loadSettings() {
+        // Charger préférences utilisateur
     }
 }
 
-// Fonctions globales pour les onclick dans le HTML
-window.showLogin = function() {
-    if (window.app) {
-        window.app.showLogin();
+// Fonctions globales pour les boutons
+function toggleVoice() {
+    if (window.coachBot && window.coachBot.voiceManager) {
+        window.coachBot.voiceManager.toggleRecording();
     }
-};
+}
 
-window.showRegister = function() {
-    if (window.app) {
-        window.app.showRegister();
+function stopSpeaking() {
+    if (window.coachBot && window.coachBot.voiceManager) {
+        window.coachBot.voiceManager.stopSpeaking();
     }
-};
+}
 
-window.sendMessage = function() {
-    if (window.app) {
-        window.app.sendMessage();
+// Initialisation au chargement
+window.addEventListener('DOMContentLoaded', () => {
+    window.coachBot = new CoachBot();
+});
+
+// Styles animation pour notification
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes slideIn {
+        from { transform: translateX(100%); }
+        to { transform: translateX(0); }
     }
-};
-
-window.logout = function() {
-    if (window.app) {
-        window.app.logout();
-    }
-};
-
-// Initialisation de l'app
-window.app = new CoachBot();
+`;
+document.head.appendChild(style);
