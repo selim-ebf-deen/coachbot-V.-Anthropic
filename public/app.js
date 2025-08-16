@@ -184,15 +184,27 @@ class CoachBot {
         avatar.textContent = initial;
     }
 
-    async showWelcomeMessage() {
-        // Créer le message vide d'abord
-        const welcomeMessage = {
-            role: 'ai',
-            message: '',
-            date: new Date().toISOString()
-        };
-        
-        this.addMessageToChat(welcomeMessage, false);
+async showWelcomeMessage() {
+    // Créer le message vide d'abord
+    const welcomeMessage = {
+        role: 'ai',
+        message: '',
+        date: new Date().toISOString()
+    };
+    
+    this.addMessageToChat(welcomeMessage, false);
+    this.currentStreamingMessage = document.querySelector('.message:last-child .message-content');
+    
+    // Texte d'accueil simple et direct
+    const welcomeText = `Assalamu alaykum ! 🤲🏻
+
+Je suis CoachBot, ton coach personnel pour 15 jours de transformation.
+
+Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites progresser ?`;
+    
+    // Effet de frappe
+    await this.typeMessage(welcomeText, false);
+}
         this.currentStreamingMessage = document.querySelector('.message:last-child .message-content');
         
         // Texte à taper
