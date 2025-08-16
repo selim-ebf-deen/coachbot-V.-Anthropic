@@ -1,4 +1,4 @@
-// CoachBot Frontend - Version finale complète avec onboarding et vocal
+// CoachBot Frontend - Version finale corrigée avec vocal premium
 class VoiceManager {
     constructor(app) {
         this.app = app;
@@ -7,6 +7,8 @@ class VoiceManager {
         this.recognition = null;
         this.synthesis = window.speechSynthesis;
         this.currentUtterance = null;
+        this.autoPlayEnabled = false; // Désactivé par défaut
+        this.preferredVoice = null;
         this.init();
     }
 
@@ -16,16 +18,60 @@ class VoiceManager {
             return;
         }
 
+        // Configuration Speech Recognition optimisée
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         this.recognition = new SpeechRecognition();
         this.recognition.lang = 'fr-FR';
         this.recognition.continuous = false;
-        this.recognition.interimResults = false;
+        this.recognition.interimResults = true; // Résultats intermédiaires
+        this.recognition.maxAlternatives = 3;
 
         this.recognition.onstart = () => this.onRecordingStart();
         this.recognition.onresult = (event) => this.onSpeechResult(event);
         this.recognition.onerror = (event) => this.onSpeechError(event);
         this.recognition.onend = () => this.onRecordingEnd();
+
+        // Sélectionner la meilleure voix française
+        this.selectBestVoice();
+    }
+
+    selectBestVoice() {
+        // Attendre que les voix soient chargées
+        const setVoice = () => {
+            const voices = this.synthesis.getVoices();
+            
+            // Préférences de voix par ordre de qualité
+            const preferredVoices = [
+                'Microsoft Hortense - French (France)',
+                'Google français',
+                'Alice',
+                'Thomas',
+                'Virginie'
+            ];
+
+            for (const voiceName of preferredVoices) {
+                const voice = voices.find(v => 
+                    v.name.includes(voiceName) || 
+                    (v.lang.startsWith('fr') && v.name.toLowerCase().includes('female'))
+                );
+                if (voice) {
+                    this.preferredVoice = voice;
+                    console.log('Voix sélectionnée:', voice.name);
+                    break;
+                }
+            }
+
+            // Fallback vers la première voix française
+            if (!this.preferredVoice) {
+                this.preferredVoice = voices.find(v => v.lang.startsWith('fr'));
+            }
+        };
+
+        if (this.synthesis.getVoices().length > 0) {
+            setVoice();
+        } else {
+            this.synthesis.onvoiceschanged = setVoice;
+        }
     }
 
     toggleRecording() {
@@ -43,6 +89,8 @@ class VoiceManager {
 
     startRecording() {
         try {
+            // Arrêter toute lecture en cours
+            this.stopSpeaking();
             this.recognition.start();
         } catch (error) {
             this.app.showError('Erreur microphone : ' + error.message);
@@ -61,7 +109,11 @@ class VoiceManager {
         if (micBtn) {
             micBtn.classList.add('recording');
             micBtn.innerHTML = '⏹️';
+            micBtn.style.background = '#ff4444';
         }
+        
+        // Effet visuel d'écoute
+        this.showListeningIndicator();
     }
 
     onRecordingEnd() {
@@ -70,58 +122,165 @@ class VoiceManager {
         if (micBtn) {
             micBtn.classList.remove('recording');
             micBtn.innerHTML = '🎙️';
+            micBtn.style.background = '#667eea';
+        }
+        
+        this.hideListeningIndicator();
+    }
+
+    showListeningIndicator() {
+        // Ajouter indicateur visuel d'écoute
+        const indicator = document.createElement('div');
+        indicator.id = 'listening-indicator';
+        indicator.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 68, 68, 0.9);
+            color: white;
+            padding: 20px 30px;
+            border-radius: 50px;
+            font-weight: bold;
+            z-index: 10001;
+            animation: pulse 1s infinite;
+        `;
+        indicator.textContent = '🎙️ J\'écoute...';
+        document.body.appendChild(indicator);
+    }
+
+    hideListeningIndicator() {
+        const indicator = document.getElementById('listening-indicator');
+        if (indicator) {
+            indicator.remove();
         }
     }
 
     onSpeechResult(event) {
-        const transcript = event.results[0][0].transcript;
         const userInput = document.getElementById('userInput');
-        if (userInput) {
+        if (!userInput) return;
+
+        // Récupérer le résultat le plus confiant
+        const result = event.results[event.results.length - 1];
+        const transcript = result[0].transcript;
+        
+        if (result.isFinal) {
+            // Résultat final - remplacer complètement
             userInput.value = transcript;
             userInput.focus();
+            
+            // Auto-envoi si message clair et court
+            if (transcript.length > 5 && transcript.length < 100) {
+                setTimeout(() => {
+                    // Suggestion d'envoi automatique
+                    const sendBtn = document.getElementById('sendBtn');
+                    if (sendBtn) {
+                        sendBtn.style.background = '#28a745';
+                        sendBtn.textContent = 'Envoyer? (3s)';
+                        
+                        setTimeout(() => {
+                            sendBtn.style.background = '#667eea';
+                            sendBtn.textContent = 'Envoyer';
+                        }, 3000);
+                    }
+                }, 500);
+            }
+        } else {
+            // Résultat intermédiaire - aperçu en temps réel
+            userInput.placeholder = `Transcription: ${transcript}...`;
         }
     }
 
     onSpeechError(event) {
         this.isRecording = false;
+        this.hideListeningIndicator();
+        
         const micBtn = document.getElementById('micBtn');
         if (micBtn) {
             micBtn.classList.remove('recording');
             micBtn.innerHTML = '🎙️';
+            micBtn.style.background = '#667eea';
         }
 
         let errorMessage = 'Erreur vocal';
         switch (event.error) {
-            case 'no-speech': errorMessage = 'Aucune voix détectée'; break;
-            case 'audio-capture': errorMessage = 'Microphone non accessible'; break;
-            case 'not-allowed': errorMessage = 'Permission micro refusée'; break;
+            case 'no-speech':
+                errorMessage = 'Aucune voix détectée - Réessayez';
+                break;
+            case 'audio-capture':
+                errorMessage = 'Microphone non accessible';
+                break;
+            case 'not-allowed':
+                errorMessage = 'Permission micro refusée';
+                break;
+            case 'network':
+                errorMessage = 'Erreur réseau vocal';
+                break;
         }
+        
         this.app.showError(errorMessage);
     }
 
+    // Lecture vocale manuelle uniquement
     speakText(text) {
         if (this.isPlaying) {
             this.stopSpeaking();
             return;
         }
 
+        // Nettoyer le texte
         const cleanText = text
             .replace(/[🤲🏻✅❌🎯🛠️📋🔍💡🚀👑🌟]/g, '')
             .replace(/\*\*(.*?)\*\*/g, '$1')
-            .replace(/\*(.*?)\*/g, '$1');
+            .replace(/\*(.*?)\*/g, '$1')
+            .replace(/\[(.*?)\]/g, '')
+            .trim();
+
+        if (!cleanText) return;
 
         this.currentUtterance = new SpeechSynthesisUtterance(cleanText);
-        this.currentUtterance.lang = 'fr-FR';
-        this.currentUtterance.rate = 0.9;
-        this.currentUtterance.pitch = 1;
+        
+        // Configuration optimisée
+        this.currentUtterance.voice = this.preferredVoice;
+        this.currentUtterance.rate = 1.0; // Vitesse naturelle
+        this.currentUtterance.pitch = 1.0;
+        this.currentUtterance.volume = 0.9;
 
-        this.currentUtterance.onstart = () => { this.isPlaying = true; };
-        this.currentUtterance.onend = () => { 
+        this.currentUtterance.onstart = () => {
+            this.isPlaying = true;
+            // Indicateur visuel de lecture
+            this.showSpeakingIndicator();
+        };
+
+        this.currentUtterance.onend = () => {
             this.isPlaying = false;
             this.currentUtterance = null;
+            this.hideSpeakingIndicator();
+        };
+
+        this.currentUtterance.onerror = () => {
+            this.isPlaying = false;
+            this.currentUtterance = null;
+            this.hideSpeakingIndicator();
         };
 
         this.synthesis.speak(this.currentUtterance);
+    }
+
+    showSpeakingIndicator() {
+        const speakerBtn = document.querySelector('.voice-controls button:last-child');
+        if (speakerBtn) {
+            speakerBtn.style.background = '#28a745';
+            speakerBtn.innerHTML = '🔊';
+        }
+    }
+
+    hideSpeakingIndicator() {
+        const speakerBtn = document.querySelector('.voice-controls button:last-child');
+        if (speakerBtn) {
+            speakerBtn.style.background = '#667eea';
+            speakerBtn.innerHTML = '🔊';
+        }
     }
 
     stopSpeaking() {
@@ -130,6 +289,16 @@ class VoiceManager {
         }
         this.isPlaying = false;
         this.currentUtterance = null;
+        this.hideSpeakingIndicator();
+    }
+
+    // Fonction pour lire le dernier message IA
+    speakLastAIMessage() {
+        const messages = document.querySelectorAll('.message.ai .message-content');
+        const lastMessage = messages[messages.length - 1];
+        if (lastMessage) {
+            this.speakText(lastMessage.textContent);
+        }
     }
 }
 
@@ -143,6 +312,7 @@ class CoachBot {
         this.voiceManager = new VoiceManager(this);
         this.serverMode = false;
         this.onboardingData = null;
+        this.messageCount = 0; // Pour éviter les boucles
         this.init();
     }
 
@@ -256,6 +426,7 @@ class CoachBot {
         }
         
         this.currentDay = day;
+        this.messageCount = 0; // Reset compteur
         this.updateDayNavigation();
         this.updateDayInfo();
         this.loadChatHistory();
@@ -474,6 +645,7 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
         this.token = null;
         this.user = null;
         this.serverMode = false;
+        this.messageCount = 0;
         this.showAuthModal();
         document.getElementById('chatMessages').innerHTML = '';
     }
@@ -492,6 +664,7 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
             if (response.ok) {
                 const messages = await response.json();
                 this.displayChatHistory(messages);
+                this.messageCount = messages.length;
             } else {
                 document.getElementById('chatMessages').innerHTML = '';
             }
@@ -519,6 +692,7 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
 
         input.value = '';
         this.isLoading = true;
+        this.messageCount++;
 
         const userMessage = {
             role: 'user',
@@ -555,6 +729,8 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
     }
 
     async simulateAIResponse(userMessage) {
+        // Analyser le message utilisateur pour plus de contexte
+        const lowerMessage = userMessage.toLowerCase();
         let selectedResponse;
         
         if (this.onboardingData) {
@@ -562,22 +738,53 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
             const objectif = this.onboardingData.objectif;
             const style = this.onboardingData.style || 'equilibre';
             
-            if (style === 'doux') {
-                selectedResponse = `${prenom}, je comprends parfaitement ce que tu ressens. C'est tout à fait normal d'avoir ces défis avec ${this.getObjectifText(objectif)}. Prends ton temps, chaque petit pas compte énormément. Qu'est-ce qui t'a motivé aujourd'hui ?`;
-            } else if (style === 'direct') {
-                selectedResponse = `Très bien ${prenom} ! J'aime ta détermination concernant ${this.getObjectifText(objectif)}. Maintenant, passons à l'action concrète. Quelle est la première chose que tu vas faire aujourd'hui pour avancer ?`;
+            // Réponses contextuelles selon le message
+            if (lowerMessage.includes('niveau') || lowerMessage.includes('échelle')) {
+                selectedResponse = `Merci ${prenom} pour cette évaluation. Sur cette base, je vais adapter mes conseils. Pour ${this.getObjectifText(objectif)}, commençons par identifier tes moments les plus favorables dans la journée.`;
+            } else if (lowerMessage.includes('toujours') || lowerMessage.includes('répète')) {
+                selectedResponse = `Je comprends ${prenom}, laisse-moi te poser une question différente : quelle a été ta plus belle réussite concernant ${this.getObjectifText(objectif)} ces derniers temps ?`;
+            } else if (lowerMessage.includes('défi') || lowerMessage.includes('problème')) {
+                selectedResponse = `C'est très lucide de ta part ${prenom}. Ce défi que tu mentionnes, peux-tu me dire depuis quand tu le rencontres ? Cela m'aiderait à mieux t'accompagner.`;
             } else {
-                selectedResponse = `Parfait ${prenom} ! Je vois que tu es motivé(e) pour ${this.getObjectifText(objectif)}. C'est exactement l'état d'esprit qu'il faut. Dis-moi, quel a été ton plus grand défi hier ?`;
+                // Réponses variées selon le style
+                const responses = {
+                    'doux': [
+                        `${prenom}, je sens ta sincérité. Chaque personne a son rythme pour ${this.getObjectifText(objectif)}. Quelle petite action pourrais-tu faire demain matin ?`,
+                        `C'est formidable ${prenom} ! Ta motivation pour ${this.getObjectifText(objectif)} me touche. Dis-moi, à quel moment de la journée te sens-tu le plus énergique ?`,
+                        `${prenom}, ta démarche est déjà un grand pas. Pour ${this.getObjectifText(objectif)}, commençons ensemble par identifier tes forces actuelles.`
+                    ],
+                    'direct': [
+                        `Excellent ${prenom} ! Maintenant, soyons concrets pour ${this.getObjectifText(objectif)}. Quelle action précise vas-tu poser dans les 24 prochaines heures ?`,
+                        `Parfait ${prenom} ! J'aime cette détermination. Pour ${this.getObjectifText(objectif)}, fixons-nous un objectif mesurable pour cette semaine.`,
+                        `Très bien ${prenom} ! Passons à l'action pour ${this.getObjectifText(objectif)}. Quel est ton plus grand obstacle en ce moment ?`
+                    ],
+                    'equilibre': [
+                        `Merci ${prenom} pour ce partage. Pour ${this.getObjectifText(objectif)}, explorons ensemble tes habitudes actuelles. Que fais-tu déjà bien ?`,
+                        `C'est très intéressant ${prenom}. Concernant ${this.getObjectifText(objectif)}, j'aimerais comprendre ton contexte. Ton entourage te soutient-il ?`,
+                        `${prenom}, ta réflexion sur ${this.getObjectifText(objectif)} montre ta maturité. Peux-tu me parler de ta routine matinale ?`
+                    ]
+                };
+                
+                const styleResponses = responses[style] || responses['equilibre'];
+                selectedResponse = styleResponses[Math.floor(Math.random() * styleResponses.length)];
             }
         } else {
-            const responses = [
-                `Barakatou ! C'est un excellent objectif. Pour mieux t'accompagner, peux-tu me dire ton prénom ?`,
-                `MashaAllah ! Je comprends ta motivation. Sur une échelle de 1 à 10, comment évalues-tu ta situation actuelle ?`,
-                `Qu'Allah facilite ton cheminement ! Dis-moi, qu'est-ce qui t'empêche le plus de réussir en ce moment ?`
-            ];
-            selectedResponse = responses[Math.floor(Math.random() * responses.length)];
+            // Réponses pour utilisateurs sans onboarding
+            if (lowerMessage.includes('selim') || lowerMessage.includes('sélim')) {
+                selectedResponse = `Ahlan wa sahlan Selim ! 🤲🏻 Ravi de faire ta connaissance. Quel est l'objectif principal sur lequel tu souhaites progresser ?`;
+            } else if (lowerMessage.includes('salat') || lowerMessage.includes('prière')) {
+                selectedResponse = `MashaAllah ! La salat est effectivement le pilier central. Pour mieux t'accompagner, peux-tu me dire ton prénom et sur quel aspect précis tu veux progresser ?`;
+            } else {
+                const responses = [
+                    `Barak Allahu fik pour ce partage ! Pour mieux te guider, dis-moi ton prénom et ton objectif principal.`,
+                    `SubhanAllah ! Je comprends ta motivation. Commençons par les bases : comment t'appelles-tu et que souhaites-tu améliorer ?`,
+                    `Qu'Allah facilite ton cheminement ! J'ai besoin de te connaître un peu : ton prénom et ton objectif prioritaire ?`
+                ];
+                selectedResponse = responses[Math.floor(Math.random() * responses.length)];
+            }
         }
         
+        // Effet de frappe
         for (let i = 0; i < selectedResponse.length; i++) {
             if (!this.currentStreamingMessage) break;
             this.currentStreamingMessage.textContent += selectedResponse[i];
@@ -585,11 +792,7 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
             await new Promise(resolve => setTimeout(resolve, 30));
         }
         
-        setTimeout(() => {
-            if (this.voiceManager) {
-                this.voiceManager.speakText(selectedResponse);
-            }
-        }, 500);
+        // PAS de lecture vocale automatique
     }
 
     async streamAIResponse(userMessage) {
@@ -625,14 +828,7 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
                 if (line.startsWith('data: ')) {
                     const data = line.slice(6);
                     if (data === '[DONE]') {
-                        const finalText = this.currentStreamingMessage?.textContent;
-                        if (finalText && finalText.trim()) {
-                            setTimeout(() => {
-                                if (this.voiceManager) {
-                                    this.voiceManager.speakText(finalText);
-                                }
-                            }, 500);
-                        }
+                        // PAS de lecture vocale automatique
                         return;
                     }
 
@@ -779,7 +975,7 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
     }
 }
 
-// Fonctions globales pour les boutons
+// Modifier les fonctions globales
 function toggleVoice() {
     if (window.coachBot && window.coachBot.voiceManager) {
         window.coachBot.voiceManager.toggleRecording();
@@ -788,7 +984,12 @@ function toggleVoice() {
 
 function stopSpeaking() {
     if (window.coachBot && window.coachBot.voiceManager) {
-        window.coachBot.voiceManager.stopSpeaking();
+        // Si pas en lecture, lire le dernier message
+        if (!window.coachBot.voiceManager.isPlaying) {
+            window.coachBot.voiceManager.speakLastAIMessage();
+        } else {
+            window.coachBot.voiceManager.stopSpeaking();
+        }
     }
 }
 
@@ -803,6 +1004,12 @@ style.textContent = `
     @keyframes slideIn {
         from { transform: translateX(100%); opacity: 0; }
         to { transform: translateX(0); opacity: 1; }
+    }
+    
+    @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+        100% { transform: scale(1); }
     }
 `;
 document.head.appendChild(style);
