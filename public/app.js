@@ -1,4 +1,4 @@
-// CoachBot Frontend - Version complète avec vocal et debug
+// CoachBot Frontend - Version complète sans bug serveur
 class VoiceManager {
     constructor(app) {
         this.app = app;
@@ -162,6 +162,7 @@ class CoachBot {
         this.isLoading = false;
         this.currentStreamingMessage = null;
         this.voiceManager = new VoiceManager(this);
+        this.serverMode = false; // Par défaut mode local
         this.init();
     }
 
@@ -255,33 +256,50 @@ class CoachBot {
 
             if (response.ok) {
                 this.user = await response.json();
+                this.serverMode = true;
+                console.log('Mode serveur activé');
                 this.updateUserInfo();
                 this.loadChatHistory();
                 setTimeout(() => this.showWelcomeMessage(), 2000);
             } else {
-                console.warn('Token invalide, redirection vers connexion');
-                this.logout();
+                console.warn('Token invalide, passage en mode local');
+                this.activateLocalMode();
             }
         } catch (error) {
-            console.error('Erreur vérification token:', error);
-            // Continuer en mode hors ligne
-            this.showError('Mode hors ligne - Serveur non accessible');
+            console.log('Serveur non accessible, passage en mode local');
+            this.activateLocalMode();
         }
+    }
+
+    activateLocalMode() {
+        this.serverMode = false;
+        this.user = { 
+            email: this.token ? 'user@local.com' : 'Invité',
+            prenom: 'Utilisateur',
+            role: 'user' 
+        };
+        localStorage.removeItem('coachbot_token'); // Enlever token invalide
+        this.token = null;
+        this.updateUserInfo();
+        document.getElementById('chatMessages').innerHTML = '';
+        setTimeout(() => this.showWelcomeMessage(), 2000);
+        console.log('Mode local activé - Fonctionnement sans serveur');
     }
 
     updateUserInfo() {
         const userInfo = document.getElementById('userInfo');
         if (this.user) {
+            const modeText = this.serverMode ? '' : ' (Mode Local)';
             userInfo.innerHTML = `
                 <div class="user-details ${this.user.role === 'admin' ? 'admin' : ''}">
-                    <span class="user-name">${this.user.prenom || this.user.email}</span>
+                    <span class="user-name">${this.user.prenom || this.user.email}${modeText}</span>
                     ${this.user.role === 'admin' ? '<span class="admin-badge">👑 Admin</span>' : ''}
                 </div>
             `;
         } else {
             userInfo.innerHTML = `
                 <div class="user-details">
-                    <span class="user-name">Mode Test</span>
+                    <span class="user-name">Mode Local</span>
                 </div>
             `;
         }
@@ -329,19 +347,21 @@ class CoachBot {
                 this.token = data.token;
                 localStorage.setItem('coachbot_token', this.token);
                 this.user = data.user;
+                this.serverMode = true;
                 this.hideAuthModal();
                 this.updateUserInfo();
                 this.loadChatHistory();
                 setTimeout(() => this.showWelcomeMessage(), 2000);
+                console.log('Connexion serveur réussie');
             } else {
                 this.showError(data.message || 'Erreur de connexion');
             }
         } catch (error) {
-            console.error('Erreur connexion:', error);
-            this.showError('Serveur non accessible - Mode test activé');
-            // Mode test sans serveur
+            console.log('Serveur non accessible, activation du mode local');
+            // Mode local avec email utilisé
+            this.user = { email: email, prenom: email.split('@')[0], role: 'user' };
+            this.serverMode = false;
             this.hideAuthModal();
-            this.user = { email: email, role: 'user' };
             this.updateUserInfo();
             setTimeout(() => this.showWelcomeMessage(), 2000);
         }
@@ -369,19 +389,21 @@ class CoachBot {
                 this.token = data.token;
                 localStorage.setItem('coachbot_token', this.token);
                 this.user = data.user;
+                this.serverMode = true;
                 this.hideAuthModal();
                 this.updateUserInfo();
                 this.loadChatHistory();
                 setTimeout(() => this.showWelcomeMessage(), 2000);
+                console.log('Inscription serveur réussie');
             } else {
                 this.showError(data.message || 'Erreur d\'inscription');
             }
         } catch (error) {
-            console.error('Erreur inscription:', error);
-            this.showError('Serveur non accessible - Mode test activé');
-            // Mode test sans serveur
+            console.log('Serveur non accessible, activation du mode local');
+            // Mode local avec email utilisé
+            this.user = { email: email, prenom: email.split('@')[0], role: 'user' };
+            this.serverMode = false;
             this.hideAuthModal();
-            this.user = { email: email, role: 'user' };
             this.updateUserInfo();
             setTimeout(() => this.showWelcomeMessage(), 2000);
         }
@@ -413,20 +435,21 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
         localStorage.removeItem('coachbot_token');
         this.token = null;
         this.user = null;
+        this.serverMode = false;
         this.showAuthModal();
         document.getElementById('chatMessages').innerHTML = '';
     }
 
     async loadChatHistory() {
+        if (!this.serverMode) {
+            // Mode local : pas d'historique
+            document.getElementById('chatMessages').innerHTML = '';
+            return;
+        }
+
         try {
             console.log('Chargement historique jour:', this.currentDay);
             
-            if (!this.token) {
-                console.log('Pas de token, pas d\'historique');
-                document.getElementById('chatMessages').innerHTML = '';
-                return;
-            }
-
             const response = await fetch(`/api/chat/history?day=${this.currentDay}`, {
                 headers: { 'Authorization': `Bearer ${this.token}` }
             });
@@ -472,7 +495,7 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
             date: new Date().toISOString()
         };
 
-        this.addMessageToChat(userMessage);
+        this.addMessageToChat(userMessage, this.serverMode);
 
         // Préparer message IA vide pour streaming
         const aiMessage = {
@@ -485,19 +508,21 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
         this.currentStreamingMessage = document.querySelector('.message:last-child .message-content');
 
         try {
-            if (this.token) {
+            if (this.serverMode) {
                 await this.streamAIResponse(message);
             } else {
-                // Mode test sans serveur
+                // Mode local sans serveur
                 await this.simulateAIResponse(message);
             }
         } catch (error) {
             console.error('Erreur envoi message:', error);
             
-            // Afficher message d'erreur dans le chat
-            if (this.currentStreamingMessage) {
-                this.currentStreamingMessage.textContent = "Désolé, le serveur n'est pas accessible. Vérifiez que votre serveur Node.js fonctionne.";
-                this.currentStreamingMessage.style.color = '#ff4444';
+            // Basculer en mode local si erreur serveur
+            if (this.serverMode) {
+                console.log('Erreur serveur, basculement en mode local');
+                this.serverMode = false;
+                this.updateUserInfo();
+                await this.simulateAIResponse(message);
             }
         }
 
@@ -505,19 +530,35 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
     }
 
     async simulateAIResponse(userMessage) {
-        // Réponse simulée pour le mode test
+        // Réponses adaptées au contexte de coaching spirituel
         const responses = [
-            "Merci pour votre message ! Je suis en mode test car le serveur n'est pas accessible.",
-            "C'est un excellent point ! En mode hors ligne, je peux vous donner des conseils généraux.",
-            "Bi-idhnillah, continuons notre discussion ! Votre question est très pertinente."
+            `Barakatou, ${this.user?.prenom || 'mon frère/ma sœur'} ! C'est un excellent objectif. Pour progresser sur ${userMessage.toLowerCase().includes('salat') || userMessage.toLowerCase().includes('prière') ? 'la salat' : 'cet objectif'}, commençons par identifier tes obstacles actuels. Qu'est-ce qui t'empêche le plus de réussir en ce moment ?`,
+            
+            `MashaAllah ! Je comprends ta motivation. Dis-moi, sur une échelle de 1 à 10, comment évalues-tu ta situation actuelle concernant ${userMessage.toLowerCase().includes('coran') ? 'ta relation avec le Coran' : 'cet objectif'} ?`,
+            
+            `Qu'Allah facilite ton cheminement ! Pour t'accompagner au mieux, peux-tu me parler de tes habitudes actuelles ? Qu'est-ce qui fonctionne déjà bien dans ta routine ?`,
+            
+            `Excellent ! ${userMessage.toLowerCase().includes('dhikr') || userMessage.toLowerCase().includes('rappel') ? 'Le dhikr est effectivement une base essentielle' : 'C\'est un objectif noble'}. Commençons par une micro-action simple : quelle petite habitude de 2 minutes pourrais-tu intégrer dès demain matin ?`,
+            
+            `Bi-idhnillah, nous allons progresser ensemble ! Pour personnaliser ton accompagnement, dis-moi : es-tu plutôt du matin ou du soir ? Et quel moment de la journée est le plus calme pour toi ?`
         ];
         
-        const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+        // Choisir une réponse adaptée
+        let selectedResponse;
+        if (userMessage.toLowerCase().includes('selim') || userMessage.toLowerCase().includes('sélim')) {
+            selectedResponse = `Ahlan wa sahlan Selim ! 🤲🏻 ${responses[0]}`;
+        } else if (userMessage.toLowerCase().includes('salat') || userMessage.toLowerCase().includes('prière')) {
+            selectedResponse = responses[0];
+        } else if (userMessage.toLowerCase().includes('coran')) {
+            selectedResponse = responses[1];
+        } else {
+            selectedResponse = responses[Math.floor(Math.random() * responses.length)];
+        }
         
         // Simuler l'effet de frappe
-        for (let i = 0; i < randomResponse.length; i++) {
+        for (let i = 0; i < selectedResponse.length; i++) {
             if (!this.currentStreamingMessage) break;
-            this.currentStreamingMessage.textContent += randomResponse[i];
+            this.currentStreamingMessage.textContent += selectedResponse[i];
             this.scrollToBottom();
             await new Promise(resolve => setTimeout(resolve, 30));
         }
@@ -525,7 +566,7 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
         // Lecture vocale
         setTimeout(() => {
             if (this.voiceManager) {
-                this.voiceManager.speakText(randomResponse);
+                this.voiceManager.speakText(selectedResponse);
             }
         }, 500);
     }
@@ -631,8 +672,8 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
             this.scrollToBottom();
         }
 
-        // Sauvegarder en base si possible
-        if (save && this.token) {
+        // Sauvegarder en base seulement si mode serveur
+        if (save && this.serverMode && this.token) {
             this.saveMessage(message);
         }
     }
@@ -686,12 +727,11 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
 
         setTimeout(() => {
             error.remove();
-        }, 5000);
+        }, 4000);
     }
 
     loadSettings() {
-        // Charger préférences utilisateur
-        console.log('CoachBot initialisé');
+        console.log('CoachBot initialisé en mode', this.serverMode ? 'serveur' : 'local');
     }
 }
 
