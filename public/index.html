@@ -365,4 +365,187 @@
             padding: 12px;
             border: 2px solid #e9ecef;
             border-radius: 8px;
-            font
+            font-size: 14px;
+            outline: none;
+        }
+
+        .form-group input:focus {
+            border-color: #667eea;
+        }
+
+        .auth-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 10px 5px;
+            transition: background 0.3s;
+        }
+
+        .auth-btn:hover {
+            background: #5a6fd8;
+        }
+
+        .switch-btn {
+            background: none;
+            border: none;
+            color: #667eea;
+            cursor: pointer;
+            text-decoration: underline;
+            margin-top: 15px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .app-container {
+                width: 100%;
+                height: 100vh;
+                border-radius: 0;
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+                height: auto;
+                padding: 15px;
+            }
+
+            .days-nav {
+                grid-template-columns: repeat(5, 1fr);
+                gap: 5px;
+            }
+
+            .day-btn {
+                padding: 8px;
+                font-size: 12px;
+            }
+
+            .main-content {
+                flex: 1;
+            }
+
+            .chat-input-container {
+                padding: 15px;
+            }
+
+            .voice-btn {
+                width: 42px;
+                height: 42px;
+                font-size: 16px;
+            }
+
+            #userInput {
+                min-height: 42px;
+            }
+        }
+
+        /* Support Safari */
+        @supports (-webkit-appearance: none) {
+            .voice-btn {
+                -webkit-appearance: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="logo">
+                <h1>🤲🏻 CoachBot</h1>
+                <p>15 jours de transformation</p>
+            </div>
+
+            <div id="userInfo" class="user-info">
+                <div class="user-details">
+                    <span class="user-name">Connexion...</span>
+                </div>
+            </div>
+
+            <div id="daysNav" class="days-nav">
+                <!-- Généré dynamiquement -->
+            </div>
+
+            <button class="logout-btn" onclick="coachBot.logout()">
+                Déconnexion
+            </button>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <div class="chat-header">
+                <div id="dayInfo" class="day-info">Jour 1 - Transformation</div>
+            </div>
+
+            <div id="chatMessages" class="chat-messages">
+                <!-- Messages générés dynamiquement -->
+            </div>
+
+            <div class="chat-input-container">
+                <div class="voice-controls">
+                    <button id="micBtn" class="voice-btn" onclick="toggleVoice()" title="Parler">
+                        🎙️
+                    </button>
+                    <button class="voice-btn" onclick="stopSpeaking()" title="Arrêter la lecture">
+                        🔊
+                    </button>
+                </div>
+                
+                <div class="input-group">
+                    <textarea 
+                        id="userInput" 
+                        placeholder="Tapez votre message ou utilisez le micro..."
+                        rows="1"
+                    ></textarea>
+                    <button id="sendBtn" class="send-btn">Envoyer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal d'authentification -->
+    <div id="authModal" class="modal">
+        <div class="modal-content">
+            <!-- Formulaire de connexion -->
+            <div id="loginForm">
+                <h2>Connexion CoachBot</h2>
+                <div class="form-group">
+                    <label for="loginEmail">Email :</label>
+                    <input type="email" id="loginEmail" required>
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Mot de passe :</label>
+                    <input type="password" id="loginPassword" required>
+                </div>
+                <button class="auth-btn" onclick="coachBot.login()">Se connecter</button>
+                <button class="switch-btn" onclick="coachBot.showRegister()">Créer un compte</button>
+            </div>
+
+            <!-- Formulaire d'inscription -->
+            <div id="registerForm" style="display: none;">
+                <h2>Inscription CoachBot</h2>
+                <div class="form-group">
+                    <label for="registerEmail">Email :</label>
+                    <input type="email" id="registerEmail" required>
+                </div>
+                <div class="form-group">
+                    <label for="registerPassword">Mot de passe :</label>
+                    <input type="password" id="registerPassword" required>
+                </div>
+                <button class="auth-btn" onclick="coachBot.register()">S'inscrire</button>
+                <button class="switch-btn" onclick="coachBot.showLogin()">Déjà un compte ?</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
