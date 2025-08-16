@@ -1,4 +1,4 @@
-// CoachBot Frontend - Version complète avec vocal
+// CoachBot Frontend - Version complète avec vocal et debug
 class VoiceManager {
     constructor(app) {
         this.app = app;
@@ -259,11 +259,13 @@ class CoachBot {
                 this.loadChatHistory();
                 setTimeout(() => this.showWelcomeMessage(), 2000);
             } else {
+                console.warn('Token invalide, redirection vers connexion');
                 this.logout();
             }
         } catch (error) {
             console.error('Erreur vérification token:', error);
-            this.logout();
+            // Continuer en mode hors ligne
+            this.showError('Mode hors ligne - Serveur non accessible');
         }
     }
 
@@ -274,6 +276,12 @@ class CoachBot {
                 <div class="user-details ${this.user.role === 'admin' ? 'admin' : ''}">
                     <span class="user-name">${this.user.prenom || this.user.email}</span>
                     ${this.user.role === 'admin' ? '<span class="admin-badge">👑 Admin</span>' : ''}
+                </div>
+            `;
+        } else {
+            userInfo.innerHTML = `
+                <div class="user-details">
+                    <span class="user-name">Mode Test</span>
                 </div>
             `;
         }
@@ -329,7 +337,13 @@ class CoachBot {
                 this.showError(data.message || 'Erreur de connexion');
             }
         } catch (error) {
-            this.showError('Erreur de connexion');
+            console.error('Erreur connexion:', error);
+            this.showError('Serveur non accessible - Mode test activé');
+            // Mode test sans serveur
+            this.hideAuthModal();
+            this.user = { email: email, role: 'user' };
+            this.updateUserInfo();
+            setTimeout(() => this.showWelcomeMessage(), 2000);
         }
     }
 
@@ -363,7 +377,13 @@ class CoachBot {
                 this.showError(data.message || 'Erreur d\'inscription');
             }
         } catch (error) {
-            this.showError('Erreur d\'inscription');
+            console.error('Erreur inscription:', error);
+            this.showError('Serveur non accessible - Mode test activé');
+            // Mode test sans serveur
+            this.hideAuthModal();
+            this.user = { email: email, role: 'user' };
+            this.updateUserInfo();
+            setTimeout(() => this.showWelcomeMessage(), 2000);
         }
     }
 
@@ -399,6 +419,14 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
 
     async loadChatHistory() {
         try {
+            console.log('Chargement historique jour:', this.currentDay);
+            
+            if (!this.token) {
+                console.log('Pas de token, pas d\'historique');
+                document.getElementById('chatMessages').innerHTML = '';
+                return;
+            }
+
             const response = await fetch(`/api/chat/history?day=${this.currentDay}`, {
                 headers: { 'Authorization': `Bearer ${this.token}` }
             });
@@ -406,9 +434,14 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
             if (response.ok) {
                 const messages = await response.json();
                 this.displayChatHistory(messages);
+                console.log('Historique chargé:', messages.length, 'messages');
+            } else {
+                console.warn('Pas d\'historique trouvé pour le jour', this.currentDay);
+                document.getElementById('chatMessages').innerHTML = '';
             }
         } catch (error) {
             console.error('Erreur chargement historique:', error);
+            document.getElementById('chatMessages').innerHTML = '';
         }
     }
 
@@ -452,16 +485,54 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
         this.currentStreamingMessage = document.querySelector('.message:last-child .message-content');
 
         try {
-            await this.streamAIResponse(message);
+            if (this.token) {
+                await this.streamAIResponse(message);
+            } else {
+                // Mode test sans serveur
+                await this.simulateAIResponse(message);
+            }
         } catch (error) {
             console.error('Erreur envoi message:', error);
-            this.showError('Erreur lors de l\'envoi du message');
+            
+            // Afficher message d'erreur dans le chat
+            if (this.currentStreamingMessage) {
+                this.currentStreamingMessage.textContent = "Désolé, le serveur n'est pas accessible. Vérifiez que votre serveur Node.js fonctionne.";
+                this.currentStreamingMessage.style.color = '#ff4444';
+            }
         }
 
         this.isLoading = false;
     }
 
+    async simulateAIResponse(userMessage) {
+        // Réponse simulée pour le mode test
+        const responses = [
+            "Merci pour votre message ! Je suis en mode test car le serveur n'est pas accessible.",
+            "C'est un excellent point ! En mode hors ligne, je peux vous donner des conseils généraux.",
+            "Bi-idhnillah, continuons notre discussion ! Votre question est très pertinente."
+        ];
+        
+        const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+        
+        // Simuler l'effet de frappe
+        for (let i = 0; i < randomResponse.length; i++) {
+            if (!this.currentStreamingMessage) break;
+            this.currentStreamingMessage.textContent += randomResponse[i];
+            this.scrollToBottom();
+            await new Promise(resolve => setTimeout(resolve, 30));
+        }
+        
+        // Lecture vocale
+        setTimeout(() => {
+            if (this.voiceManager) {
+                this.voiceManager.speakText(randomResponse);
+            }
+        }, 500);
+    }
+
     async streamAIResponse(userMessage) {
+        console.log('Envoi message vers serveur...');
+        
         const response = await fetch('/api/chat/message', {
             method: 'POST',
             headers: {
@@ -475,7 +546,8 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
         });
 
         if (!response.ok) {
-            throw new Error('Erreur serveur');
+            console.error('Erreur serveur:', response.status, response.statusText);
+            throw new Error(`Erreur serveur: ${response.status}`);
         }
 
         const reader = response.body.getReader();
@@ -498,7 +570,9 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
                         const finalText = this.currentStreamingMessage?.textContent;
                         if (finalText && finalText.trim()) {
                             setTimeout(() => {
-                                this.voiceManager.speakText(finalText);
+                                if (this.voiceManager) {
+                                    this.voiceManager.speakText(finalText);
+                                }
                             }, 500);
                         }
                         return;
@@ -510,7 +584,7 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
                             await this.typeMessage(parsed.content, true);
                         }
                     } catch (e) {
-                        // Ignorer erreurs parsing JSON
+                        console.warn('Erreur parsing JSON:', e);
                     }
                 }
             }
@@ -557,7 +631,7 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
             this.scrollToBottom();
         }
 
-        // Sauvegarder en base si nécessaire
+        // Sauvegarder en base si possible
         if (save && this.token) {
             this.saveMessage(message);
         }
@@ -565,7 +639,7 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
 
     async saveMessage(message) {
         try {
-            await fetch('/api/chat/save', {
+            const response = await fetch('/api/chat/save', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -576,8 +650,12 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
                     day: this.currentDay
                 })
             });
+            
+            if (!response.ok) {
+                console.warn('Impossible de sauvegarder le message');
+            }
         } catch (error) {
-            console.error('Erreur sauvegarde message:', error);
+            console.warn('Erreur sauvegarde message:', error);
         }
     }
 
@@ -601,17 +679,19 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
             border-radius: 8px;
             z-index: 10000;
             animation: slideIn 0.3s ease;
+            max-width: 300px;
         `;
 
         document.body.appendChild(error);
 
         setTimeout(() => {
             error.remove();
-        }, 3000);
+        }, 5000);
     }
 
     loadSettings() {
         // Charger préférences utilisateur
+        console.log('CoachBot initialisé');
     }
 }
 
@@ -637,8 +717,8 @@ window.addEventListener('DOMContentLoaded', () => {
 const style = document.createElement('style');
 style.textContent = `
     @keyframes slideIn {
-        from { transform: translateX(100%); }
-        to { transform: translateX(0); }
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
     }
 `;
 document.head.appendChild(style);
