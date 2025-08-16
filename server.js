@@ -1,4 +1,4 @@
-// CoachBot v2.0 - Serveur complet optimisé avec contexte
+// CoachBot v2.0 - Serveur complet optimisé avec contexte global
 import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
@@ -107,6 +107,103 @@ function addEntry(userId, day, entry) {
   arr.push(entry);
   db[userId][day] = arr;
   saveJournal(db);
+}
+
+// Nouvelle fonction pour récupérer TOUT l'historique d'un utilisateur
+function getAllUserHistory(userId) {
+  const db = loadJournal();
+  const userJournal = db[userId] || {};
+  
+  let allMessages = [];
+  
+  // Parcourir tous les jours (1 à 15)
+  for (let day = 1; day <= 15; day++) {
+    const dayEntries = userJournal[day];
+    if (dayEntries) {
+      const entries = Array.isArray(dayEntries) ? dayEntries : [dayEntries];
+      entries.forEach(entry => {
+        allMessages.push({
+          ...entry,
+          day: day
+        });
+      });
+    }
+  }
+  
+  // Trier par date pour avoir l'ordre chronologique
+  allMessages.sort((a, b) => new Date(a.date) - new Date(b.date));
+  
+  return allMessages;
+}
+
+// Nouvelle fonction pour créer un résumé des sessions précédentes
+function createUserSummary(userId, currentDay) {
+  const allHistory = getAllUserHistory(userId);
+  const meta = getMeta(userId);
+  
+  let summary = `[PROFIL UTILISATEUR]\n`;
+  summary += `Prénom: ${meta.name || "Non défini"}\n`;
+  summary += `Profil DISC: ${meta.disc || "À identifier"}\n\n`;
+  
+  if (allHistory.length === 0) {
+    return summary + `[PREMIÈRE SESSION - Aucun historique]`;
+  }
+  
+  // Grouper par jour
+  const sessionsByDay = {};
+  allHistory.forEach(entry => {
+    if (!sessionsByDay[entry.day]) {
+      sessionsByDay[entry.day] = [];
+    }
+    sessionsByDay[entry.day].push(entry);
+  });
+  
+  summary += `[HISTORIQUE DES SESSIONS PRÉCÉDENTES]\n`;
+  
+  Object.keys(sessionsByDay)
+    .sort((a, b) => Number(a) - Number(b))
+    .forEach(day => {
+      if (Number(day) < currentDay) { // Seulement les jours précédents
+        summary += `\n--- JOUR ${day} ---\n`;
+        const dayMessages = sessionsByDay[day];
+        
+        // Résumer chaque session
+        let objectives = [];
+        let actions = [];
+        let commitments = [];
+        
+        dayMessages.forEach(msg => {
+          const content = msg.message.toLowerCase();
+          
+          // Identifier les objectifs
+          if (msg.role === 'user' && (content.includes('objectif') || content.includes('but') || content.includes('veux'))) {
+            objectives.push(msg.message);
+          }
+          
+          // Identifier les actions/micro-actions
+          if (msg.role === 'ai' && (content.includes('micro-action') || content.includes('action pour') || content.includes('programme'))) {
+            actions.push(msg.message);
+          }
+          
+          // Identifier les engagements
+          if (msg.role === 'user' && (content.includes('oui') || content.includes('ok') || content.includes('d\'accord') || content.includes('ameen'))) {
+            commitments.push(msg.message);
+          }
+        });
+        
+        if (objectives.length > 0) {
+          summary += `Objectifs identifiés: ${objectives[0]}\n`;
+        }
+        if (actions.length > 0) {
+          summary += `Actions proposées: ${actions[0]}\n`;
+        }
+        if (commitments.length > 0) {
+          summary += `Engagement utilisateur: ${commitments[commitments.length - 1]}\n`;
+        }
+      }
+    });
+  
+  return summary;
 }
 
 // Meta functions
@@ -294,7 +391,7 @@ function systemPrompt(name, disc) {
   return base + note;
 }
 
-// Chat streaming AVEC CONTEXTE
+// Chat streaming AVEC CONTEXTE GLOBAL
 app.post("/api/chat/stream", authMiddleware, async (req, res) => {
   const { message, day = 1, provider = "anthropic" } = req.body ?? {};
   const meta0 = getMeta(req.user.sub);
@@ -313,18 +410,21 @@ app.post("/api/chat/stream", authMiddleware, async (req, res) => {
 
   const meta = getMeta(req.user.sub);
   
-  // RÉCUPÉRER TOUT L'HISTORIQUE DU JOUR pour donner le contexte à l'IA
+  // RÉCUPÉRER LE CONTEXTE GLOBAL DE L'UTILISATEUR
   const chatHistory = getEntries(req.user.sub, day);
+  const userSummary = createUserSummary(req.user.sub, day);
   
   const system = systemPrompt(meta.name, meta.disc);
   
-  // CONSTRUIRE LE CONTEXTE COMPLET
-  let conversationContext = `Plan du jour (${day}) : ${plans[Number(day)] || "Plan non spécifié."}\n\n`;
+  // CONSTRUIRE LE CONTEXTE COMPLET AVEC HISTORIQUE GLOBAL
+  let conversationContext = `${userSummary}\n\n`;
+  conversationContext += `[SESSION ACTUELLE - JOUR ${day}]\n`;
+  conversationContext += `Plan du jour : ${plans[Number(day)] || "Plan non spécifié."}\n\n`;
   
-  // Ajouter l'historique des messages du jour
-  if (chatHistory.length > 1) { // Plus d'un message = il y a de l'historique
-    conversationContext += "Historique de la conversation d'aujourd'hui :\n";
-    chatHistory.slice(0, -1).forEach(entry => { // Tous sauf le dernier (qui est le message actuel)
+  // Ajouter l'historique du jour actuel
+  if (chatHistory.length > 1) {
+    conversationContext += "Messages du jour actuel :\n";
+    chatHistory.slice(0, -1).forEach(entry => {
       conversationContext += `${entry.role === 'user' ? 'Utilisateur' : 'Assistant'}: ${entry.message}\n`;
     });
     conversationContext += "\n";
@@ -356,11 +456,11 @@ app.post("/api/chat/stream", authMiddleware, async (req, res) => {
         },
         body: JSON.stringify({
           model: ANTHROPIC_MODEL,
-          max_tokens: 800,
+          max_tokens: 1000, // Augmenté pour tenir compte du contexte plus riche
           temperature: 0.4,
           stream: true,
           system,
-          messages: [{ role: "user", content: conversationContext }] // CONTEXTE COMPLET
+          messages: [{ role: "user", content: conversationContext }] // CONTEXTE GLOBAL
         })
       });
 
