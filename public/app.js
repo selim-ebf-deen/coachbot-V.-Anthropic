@@ -1,4 +1,4 @@
-// CoachBot Frontend - Version finale corrigée avec vocal premium
+// CoachBot Frontend - Version finale complète avec onboarding et vocal
 class VoiceManager {
     constructor(app) {
         this.app = app;
@@ -7,530 +7,520 @@ class VoiceManager {
         this.recognition = null;
         this.synthesis = window.speechSynthesis;
         this.currentUtterance = null;
-        this.autoPlayEnabled = false; // Désactivé par défaut
-        this.preferredVoice = null;
-        this.init();
+        this.initRecognition();
     }
 
-    init() {
-        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-            console.warn('Speech Recognition non supporté');
-            return;
-        }
+    initRecognition() {
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            this.recognition = new SpeechRecognition();
+            this.recognition.continuous = false;
+            this.recognition.interimResults = true;
+            this.recognition.lang = 'fr-FR';
 
-        // Configuration Speech Recognition optimisée
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        this.recognition = new SpeechRecognition();
-        this.recognition.lang = 'fr-FR';
-        this.recognition.continuous = false;
-        this.recognition.interimResults = true; // Résultats intermédiaires
-        this.recognition.maxAlternatives = 3;
+            this.recognition.onstart = () => {
+                this.isRecording = true;
+                this.updateMicButton();
+                this.showInterimResult('🎤 Écoute en cours...');
+            };
 
-        this.recognition.onstart = () => this.onRecordingStart();
-        this.recognition.onresult = (event) => this.onSpeechResult(event);
-        this.recognition.onerror = (event) => this.onSpeechError(event);
-        this.recognition.onend = () => this.onRecordingEnd();
+            this.recognition.onresult = (event) => {
+                let interimTranscript = '';
+                let finalTranscript = '';
 
-        // Sélectionner la meilleure voix française
-        this.selectBestVoice();
-    }
-
-    selectBestVoice() {
-        // Attendre que les voix soient chargées
-        const setVoice = () => {
-            const voices = this.synthesis.getVoices();
-            
-            // Préférences de voix par ordre de qualité
-            const preferredVoices = [
-                'Microsoft Hortense - French (France)',
-                'Google français',
-                'Alice',
-                'Thomas',
-                'Virginie'
-            ];
-
-            for (const voiceName of preferredVoices) {
-                const voice = voices.find(v => 
-                    v.name.includes(voiceName) || 
-                    (v.lang.startsWith('fr') && v.name.toLowerCase().includes('female'))
-                );
-                if (voice) {
-                    this.preferredVoice = voice;
-                    console.log('Voix sélectionnée:', voice.name);
-                    break;
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript;
+                    } else {
+                        interimTranscript += transcript;
+                    }
                 }
-            }
 
-            // Fallback vers la première voix française
-            if (!this.preferredVoice) {
-                this.preferredVoice = voices.find(v => v.lang.startsWith('fr'));
-            }
-        };
+                if (interimTranscript) {
+                    this.showInterimResult('🎤 ' + interimTranscript);
+                }
 
-        if (this.synthesis.getVoices().length > 0) {
-            setVoice();
-        } else {
-            this.synthesis.onvoiceschanged = setVoice;
+                if (finalTranscript) {
+                    this.app.messageInput.value = finalTranscript;
+                    this.hideInterimResult();
+                    this.app.sendMessage();
+                }
+            };
+
+            this.recognition.onerror = (event) => {
+                console.error('Erreur reconnaissance vocale:', event.error);
+                this.isRecording = false;
+                this.updateMicButton();
+                this.hideInterimResult();
+                
+                if (event.error === 'not-allowed') {
+                    alert('Veuillez autoriser l\'accès au microphone dans les paramètres de votre navigateur.');
+                }
+            };
+
+            this.recognition.onend = () => {
+                this.isRecording = false;
+                this.updateMicButton();
+                this.hideInterimResult();
+            };
+        }
+    }
+
+    showInterimResult(text) {
+        let interim = document.getElementById('interim-result');
+        if (!interim) {
+            interim = document.createElement('div');
+            interim.id = 'interim-result';
+            interim.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: rgba(0,0,0,0.8);
+                color: white;
+                padding: 20px;
+                border-radius: 10px;
+                z-index: 10000;
+                font-size: 16px;
+                text-align: center;
+                min-width: 200px;
+            `;
+            document.body.appendChild(interim);
+        }
+        interim.textContent = text;
+    }
+
+    hideInterimResult() {
+        const interim = document.getElementById('interim-result');
+        if (interim) {
+            interim.remove();
+        }
+    }
+
+    updateMicButton() {
+        const micBtn = document.getElementById('mic-btn');
+        if (micBtn) {
+            if (this.isRecording) {
+                micBtn.style.background = '#ff4444';
+                micBtn.innerHTML = '⏹️';
+                micBtn.title = 'Arrêter l\'enregistrement';
+            } else {
+                micBtn.style.background = '';
+                micBtn.innerHTML = '🎤';
+                micBtn.title = 'Commencer l\'enregistrement vocal';
+            }
+        }
+    }
+
+    updateSpeakerButton() {
+        const speakerBtn = document.getElementById('speaker-btn');
+        if (speakerBtn) {
+            if (this.isPlaying) {
+                speakerBtn.style.background = '#ff4444';
+                speakerBtn.innerHTML = '⏹️';
+                speakerBtn.title = 'Arrêter la lecture';
+            } else {
+                speakerBtn.style.background = '';
+                speakerBtn.innerHTML = '🔊';
+                speakerBtn.title = 'Lire le dernier message';
+            }
         }
     }
 
     toggleRecording() {
         if (!this.recognition) {
-            this.app.showError('Vocal non supporté sur ce navigateur');
+            alert('Reconnaissance vocale non supportée par votre navigateur.');
             return;
         }
 
         if (this.isRecording) {
-            this.stopRecording();
-        } else {
-            this.startRecording();
-        }
-    }
-
-    startRecording() {
-        try {
-            // Arrêter toute lecture en cours
-            this.stopSpeaking();
-            this.recognition.start();
-        } catch (error) {
-            this.app.showError('Erreur microphone : ' + error.message);
-        }
-    }
-
-    stopRecording() {
-        if (this.recognition && this.isRecording) {
             this.recognition.stop();
-        }
-    }
-
-    onRecordingStart() {
-        this.isRecording = true;
-        const micBtn = document.getElementById('micBtn');
-        if (micBtn) {
-            micBtn.classList.add('recording');
-            micBtn.innerHTML = '⏹️';
-            micBtn.style.background = '#ff4444';
-        }
-        
-        // Effet visuel d'écoute
-        this.showListeningIndicator();
-    }
-
-    onRecordingEnd() {
-        this.isRecording = false;
-        const micBtn = document.getElementById('micBtn');
-        if (micBtn) {
-            micBtn.classList.remove('recording');
-            micBtn.innerHTML = '🎙️';
-            micBtn.style.background = '#667eea';
-        }
-        
-        this.hideListeningIndicator();
-    }
-
-    showListeningIndicator() {
-        // Ajouter indicateur visuel d'écoute
-        const indicator = document.createElement('div');
-        indicator.id = 'listening-indicator';
-        indicator.style.cssText = `
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(255, 68, 68, 0.9);
-            color: white;
-            padding: 20px 30px;
-            border-radius: 50px;
-            font-weight: bold;
-            z-index: 10001;
-            animation: pulse 1s infinite;
-        `;
-        indicator.textContent = '🎙️ J\'écoute...';
-        document.body.appendChild(indicator);
-    }
-
-    hideListeningIndicator() {
-        const indicator = document.getElementById('listening-indicator');
-        if (indicator) {
-            indicator.remove();
-        }
-    }
-
-    onSpeechResult(event) {
-        const userInput = document.getElementById('userInput');
-        if (!userInput) return;
-
-        // Récupérer le résultat le plus confiant
-        const result = event.results[event.results.length - 1];
-        const transcript = result[0].transcript;
-        
-        if (result.isFinal) {
-            // Résultat final - remplacer complètement
-            userInput.value = transcript;
-            userInput.focus();
-            
-            // Auto-envoi si message clair et court
-            if (transcript.length > 5 && transcript.length < 100) {
-                setTimeout(() => {
-                    // Suggestion d'envoi automatique
-                    const sendBtn = document.getElementById('sendBtn');
-                    if (sendBtn) {
-                        sendBtn.style.background = '#28a745';
-                        sendBtn.textContent = 'Envoyer? (3s)';
-                        
-                        setTimeout(() => {
-                            sendBtn.style.background = '#667eea';
-                            sendBtn.textContent = 'Envoyer';
-                        }, 3000);
-                    }
-                }, 500);
-            }
         } else {
-            // Résultat intermédiaire - aperçu en temps réel
-            userInput.placeholder = `Transcription: ${transcript}...`;
+            try {
+                this.recognition.start();
+            } catch (error) {
+                console.error('Erreur démarrage reconnaissance:', error);
+                alert('Impossible de démarrer la reconnaissance vocale.');
+            }
         }
     }
 
-    onSpeechError(event) {
-        this.isRecording = false;
-        this.hideListeningIndicator();
+    getBestVoice() {
+        const voices = this.synthesis.getVoices();
         
-        const micBtn = document.getElementById('micBtn');
-        if (micBtn) {
-            micBtn.classList.remove('recording');
-            micBtn.innerHTML = '🎙️';
-            micBtn.style.background = '#667eea';
+        // Priorité aux voix françaises de qualité
+        const preferredVoices = [
+            'Microsoft Hortense - French (France)',
+            'Google français',
+            'French (France)',
+            'fr-FR'
+        ];
+
+        for (const preferred of preferredVoices) {
+            const voice = voices.find(v => v.name.includes(preferred) || v.lang.includes('fr-FR'));
+            if (voice) return voice;
         }
 
-        let errorMessage = 'Erreur vocal';
-        switch (event.error) {
-            case 'no-speech':
-                errorMessage = 'Aucune voix détectée - Réessayez';
-                break;
-            case 'audio-capture':
-                errorMessage = 'Microphone non accessible';
-                break;
-            case 'not-allowed':
-                errorMessage = 'Permission micro refusée';
-                break;
-            case 'network':
-                errorMessage = 'Erreur réseau vocal';
-                break;
-        }
-        
-        this.app.showError(errorMessage);
+        // Fallback vers n'importe quelle voix française
+        return voices.find(v => v.lang.startsWith('fr')) || voices[0];
     }
 
-    // Lecture vocale manuelle uniquement
     speakText(text) {
         if (this.isPlaying) {
             this.stopSpeaking();
             return;
         }
 
-        // Nettoyer le texte
+        if (!text || text.trim() === '') return;
+
+        // Nettoyer le texte des émoticônes et caractères spéciaux
         const cleanText = text
-            .replace(/[🤲🏻✅❌🎯🛠️📋🔍💡🚀👑🌟]/g, '')
+            .replace(/[🤲🏻✨💪🎯📈🌟⭐️🔥💎🚀📱💡🎪🎭🎨🎯🏆🎊🎉]/g, '')
             .replace(/\*\*(.*?)\*\*/g, '$1')
             .replace(/\*(.*?)\*/g, '$1')
-            .replace(/\[(.*?)\]/g, '')
             .trim();
 
         if (!cleanText) return;
 
         this.currentUtterance = new SpeechSynthesisUtterance(cleanText);
         
-        // Configuration optimisée
-        this.currentUtterance.voice = this.preferredVoice;
-        this.currentUtterance.rate = 1.0; // Vitesse naturelle
+        // Configuration de la voix
+        const bestVoice = this.getBestVoice();
+        if (bestVoice) {
+            this.currentUtterance.voice = bestVoice;
+        }
+        
+        this.currentUtterance.rate = 0.9;
         this.currentUtterance.pitch = 1.0;
-        this.currentUtterance.volume = 0.9;
+        this.currentUtterance.volume = 1.0;
 
         this.currentUtterance.onstart = () => {
             this.isPlaying = true;
-            // Indicateur visuel de lecture
-            this.showSpeakingIndicator();
+            this.updateSpeakerButton();
         };
 
         this.currentUtterance.onend = () => {
             this.isPlaying = false;
+            this.updateSpeakerButton();
             this.currentUtterance = null;
-            this.hideSpeakingIndicator();
         };
 
         this.currentUtterance.onerror = () => {
             this.isPlaying = false;
+            this.updateSpeakerButton();
             this.currentUtterance = null;
-            this.hideSpeakingIndicator();
         };
 
         this.synthesis.speak(this.currentUtterance);
     }
 
-    showSpeakingIndicator() {
-        const speakerBtn = document.querySelector('.voice-controls button:last-child');
-        if (speakerBtn) {
-            speakerBtn.style.background = '#28a745';
-            speakerBtn.innerHTML = '🔊';
-        }
-    }
-
-    hideSpeakingIndicator() {
-        const speakerBtn = document.querySelector('.voice-controls button:last-child');
-        if (speakerBtn) {
-            speakerBtn.style.background = '#667eea';
-            speakerBtn.innerHTML = '🔊';
-        }
-    }
-
     stopSpeaking() {
-        if (this.synthesis.speaking) {
+        if (this.synthesis.speaking || this.isPlaying) {
             this.synthesis.cancel();
+            this.isPlaying = false;
+            this.updateSpeakerButton();
+            this.currentUtterance = null;
         }
-        this.isPlaying = false;
-        this.currentUtterance = null;
-        this.hideSpeakingIndicator();
     }
 
-    // Fonction pour lire le dernier message IA
-    speakLastAIMessage() {
-        const messages = document.querySelectorAll('.message.ai .message-content');
-        const lastMessage = messages[messages.length - 1];
-        if (lastMessage) {
-            this.speakText(lastMessage.textContent);
+    toggleSpeaker() {
+        if (this.isPlaying) {
+            this.stopSpeaking();
+        } else {
+            // Lire le dernier message IA
+            const lastAiMessage = this.app.getLastAiMessage();
+            if (lastAiMessage) {
+                this.speakText(lastAiMessage);
+            } else {
+                alert('Aucun message à lire.');
+            }
         }
     }
 }
 
 class CoachBot {
     constructor() {
-        this.token = localStorage.getItem('coachbot_token');
         this.currentDay = 1;
-        this.user = null;
-        this.isLoading = false;
-        this.currentStreamingMessage = null;
-        this.voiceManager = new VoiceManager(this);
         this.serverMode = false;
-        this.onboardingData = null;
-        this.messageCount = 0; // Pour éviter les boucles
-        this.init();
-    }
-
-    init() {
-        this.loadOnboardingData();
-        this.checkAuth();
-        this.setupEventListeners();
-        this.generateDaysNav();
-        this.loadSettings();
-    }
-
-    loadOnboardingData() {
-        const onboardingCompleted = localStorage.getItem('coachbot_onboarding_completed');
-        const onboardingData = localStorage.getItem('coachbot_onboarding');
+        this.user = null;
+        this.token = localStorage.getItem('coachbot_token');
+        this.currentStreamingMessage = null;
+        this.messageHistory = [];
+        this.messageCounter = 0;
+        this.voiceManager = new VoiceManager(this);
         
-        if (onboardingData) {
-            this.onboardingData = JSON.parse(onboardingData);
-        }
-
-        if (!onboardingCompleted && !this.onboardingData) {
-            setTimeout(() => this.showOnboardingRedirect(), 2000);
-        }
+        this.authModal = document.getElementById('auth-modal');
+        this.loginForm = document.getElementById('login-form');
+        this.registerForm = document.getElementById('register-form');
+        this.chatMessages = document.querySelector('.chat-messages');
+        this.messageInput = document.getElementById('message-input');
+        this.userInfo = document.querySelector('.user-info');
+        
+        this.initEventListeners();
+        this.initApp();
     }
 
-    showOnboardingRedirect() {
-        const modal = document.createElement('div');
-        modal.style.cssText = `
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8); display: flex; align-items: center;
-            justify-content: center; z-index: 10000;
-        `;
+    initEventListeners() {
+        // Navigation des jours
+        document.querySelectorAll('.day-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const day = parseInt(e.target.dataset.day);
+                this.switchToDay(day);
+            });
+        });
 
-        modal.innerHTML = `
-            <div style="background: white; padding: 40px; border-radius: 20px; text-align: center;
-                max-width: 500px; margin: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.2);">
-                <div style="font-size: 60px; margin-bottom: 20px;">🤲🏻</div>
-                <h2 style="color: #333; margin-bottom: 15px;">Assalamu alaykum !</h2>
-                <p style="color: #666; margin-bottom: 30px; line-height: 1.6;">
-                    Bienvenue dans CoachBot ! Pour t'offrir la meilleure expérience possible, 
-                    nous devons d'abord faire connaissance.
-                </p>
-                <button onclick="window.location.href='onboarding.html'" style="
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color: white; border: none; padding: 15px 30px; border-radius: 25px;
-                    font-weight: bold; cursor: pointer; font-size: 16px; margin-right: 10px;
-                ">Commencer l'introduction ✨</button>
-                <button onclick="this.parentElement.parentElement.remove()" style="
-                    background: #f8f9fa; color: #666; border: 2px solid #e9ecef;
-                    padding: 13px 25px; border-radius: 25px; cursor: pointer; font-size: 14px;
-                ">Plus tard</button>
-            </div>
-        `;
+        // Formulaires d'authentification
+        this.loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            this.login(email, password);
+        });
 
-        document.body.appendChild(modal);
-    }
+        this.registerForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const email = document.getElementById('register-email').value;
+            const password = document.getElementById('register-password').value;
+            const name = document.getElementById('register-name').value;
+            this.register(email, password, name);
+        });
 
-    checkAuth() {
-        if (!this.token) {
-            this.showAuthModal();
-        } else {
-            this.verifyToken();
-        }
-    }
-
-    setupEventListeners() {
-        document.getElementById('userInput').addEventListener('keypress', (e) => {
+        // Envoi de messages
+        this.messageInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 this.sendMessage();
             }
         });
 
-        document.getElementById('sendBtn').addEventListener('click', () => {
-            this.sendMessage();
+        // Bouton déconnexion
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('logout-btn')) {
+                this.logout();
+            }
         });
 
-        window.onclick = (event) => {
-            const modal = document.getElementById('authModal');
-            if (event.target === modal) {
-                modal.style.display = 'none';
+        // Commutateurs auth modal
+        document.addEventListener('click', (e) => {
+            if (e.target.id === 'show-register') {
+                this.showRegisterForm();
+            } else if (e.target.id === 'show-login') {
+                this.showLoginForm();
             }
-        };
-    }
-
-    generateDaysNav() {
-        const nav = document.getElementById('daysNav');
-        nav.innerHTML = '';
-        
-        for (let i = 1; i <= 15; i++) {
-            const btn = document.createElement('button');
-            btn.className = 'day-btn';
-            btn.textContent = `J${i}`;
-            btn.onclick = () => this.switchDay(i);
-            
-            if (this.user?.role === 'admin') {
-                btn.classList.add('admin-access');
-                btn.title = `Jour ${i} (Accès Admin)`;
-            }
-            
-            nav.appendChild(btn);
-        }
-        
-        this.updateDayNavigation();
-    }
-
-    switchDay(day) {
-        if (day === this.currentDay || this.isLoading) return;
-        
-        if (this.user?.role !== 'admin') {
-            // TODO: Logique de progression pour users normaux
-        }
-        
-        this.currentDay = day;
-        this.messageCount = 0; // Reset compteur
-        this.updateDayNavigation();
-        this.updateDayInfo();
-        this.loadChatHistory();
-    }
-
-    updateDayNavigation() {
-        document.querySelectorAll('.day-btn').forEach((btn, index) => {
-            btn.classList.toggle('active', index + 1 === this.currentDay);
         });
     }
 
-    updateDayInfo() {
-        const dayInfo = document.getElementById('dayInfo');
-        dayInfo.textContent = `Jour ${this.currentDay} - Transformation`;
+    async initApp() {
+        await this.checkServerConnection();
+        this.updateUserInfo();
+        this.loadMessages();
+        
+        // Vérifier onboarding après 2 secondes
+        setTimeout(() => {
+            this.checkOnboarding();
+        }, 2000);
     }
 
-    async verifyToken() {
+    async checkServerConnection() {
         try {
+            if (!this.token) {
+                this.activateLocalMode();
+                return;
+            }
+
             const response = await fetch('/api/user/profile', {
-                headers: { 'Authorization': `Bearer ${this.token}` }
+                headers: {
+                    'Authorization': `Bearer ${this.token}`
+                }
             });
 
             if (response.ok) {
-                this.user = await response.json();
+                const userData = await response.json();
+                this.user = userData;
                 this.serverMode = true;
-                this.updateUserInfo();
-                this.loadChatHistory();
-                setTimeout(() => this.showWelcomeMessage(), 2000);
+                
+                // 🎯 SYNCHRONISER L'ONBOARDING SI CONNECTÉ
+                await this.syncOnboardingToServer();
+                
             } else {
                 this.activateLocalMode();
             }
         } catch (error) {
+            console.error('Erreur connexion serveur:', error);
             this.activateLocalMode();
+        }
+    }
+
+    async syncOnboardingToServer() {
+        try {
+            const onboardingData = localStorage.getItem('coachbot_onboarding');
+            if (onboardingData && this.serverMode) {
+                const profile = JSON.parse(onboardingData);
+                
+                // Envoyer les métadonnées au serveur
+                const metaResponse = await fetch('/api/meta', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${this.token}`
+                    },
+                    body: JSON.stringify({
+                        name: profile.prenom,
+                        disc: profile.coachingStyle || profile.style
+                    })
+                });
+
+                if (metaResponse.ok) {
+                    console.log('✅ Données d\'onboarding synchronisées avec le serveur');
+                    
+                    // Optionnel : sauvegarder aussi une entrée de journal avec le profil complet
+                    await fetch('/api/chat/save', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${this.token}`
+                        },
+                        body: JSON.stringify({
+                            day: 1,
+                            role: 'user',
+                            message: `[PROFIL ONBOARDING] Prénom: ${profile.prenom}, Âge: ${profile.age}, Objectif: ${profile.objectif}, Style de coaching: ${profile.coachingStyle}, Niveau actuel: ${profile.niveauActuel}/10, Obstacles: ${profile.obstacles}`
+                        })
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('❌ Erreur sync onboarding:', error);
         }
     }
 
     activateLocalMode() {
         this.serverMode = false;
-        this.user = { 
-            email: 'local@user.com',
-            prenom: this.onboardingData?.prenom || 'Utilisateur',
-            role: 'user' 
-        };
-        localStorage.removeItem('coachbot_token');
-        this.token = null;
-        this.updateUserInfo();
-        document.getElementById('chatMessages').innerHTML = '';
-        setTimeout(() => this.showWelcomeMessage(), 2000);
+        this.user = JSON.parse(localStorage.getItem('coachbot_user')) || null;
+        console.log('CoachBot initialisé en mode local');
+        
+        // Charger voix française pour le mode local
+        if (this.voiceManager && this.voiceManager.synthesis) {
+            this.voiceManager.synthesis.onvoiceschanged = () => {
+                console.log('Voix sélectionnée:', this.voiceManager.getBestVoice()?.name || 'Voix par défaut');
+            };
+        }
     }
 
     updateUserInfo() {
-        const userInfo = document.getElementById('userInfo');
+        const onboardingData = localStorage.getItem('coachbot_onboarding');
         let displayName = 'Utilisateur';
+        let configBadge = '';
         
-        if (this.onboardingData && this.onboardingData.prenom) {
-            displayName = this.onboardingData.prenom;
-        } else if (this.user) {
-            displayName = this.user.prenom || this.user.email;
+        if (onboardingData) {
+            const profile = JSON.parse(onboardingData);
+            displayName = profile.prenom || 'Utilisateur';
+            configBadge = '<span class="config-badge">✨ Configuré</span>';
+        } else if (this.user?.name) {
+            displayName = this.user.name;
         }
+
+        const modeIndicator = this.serverMode ? '🟢 Serveur' : '🔴 Local';
+        const adminBadge = this.user?.role === 'admin' ? '<span class="admin-badge">👑 Admin</span>' : '';
         
-        const modeText = this.serverMode ? '' : ' (Mode Local)';
-        
-        userInfo.innerHTML = `
-            <div class="user-details ${this.user?.role === 'admin' ? 'admin' : ''}">
-                <span class="user-name">${displayName}${modeText}</span>
-                ${this.user?.role === 'admin' ? '<span class="admin-badge">👑 Admin</span>' : ''}
-                ${this.onboardingData ? '<span class="onboarding-badge">✨ Configuré</span>' : ''}
+        this.userInfo.innerHTML = `
+            <div>
+                <strong>${displayName}</strong> ${adminBadge} ${configBadge}
+                <div class="mode-indicator">${modeIndicator}</div>
             </div>
         `;
     }
 
-    showAuthModal() {
-        document.getElementById('authModal').style.display = 'flex';
-        document.getElementById('loginForm').style.display = 'block';
-        document.getElementById('registerForm').style.display = 'none';
-    }
-
-    hideAuthModal() {
-        document.getElementById('authModal').style.display = 'none';
-    }
-
-    showRegister() {
-        document.getElementById('loginForm').style.display = 'none';
-        document.getElementById('registerForm').style.display = 'block';
-    }
-
-    showLogin() {
-        document.getElementById('registerForm').style.display = 'none';
-        document.getElementById('loginForm').style.display = 'block';
-    }
-
-    async login() {
-        const email = document.getElementById('loginEmail').value;
-        const password = document.getElementById('loginPassword').value;
-
-        if (!email || !password) {
-            this.showError('Email et mot de passe requis');
-            return;
+    checkOnboarding() {
+        const onboardingData = localStorage.getItem('coachbot_onboarding');
+        if (!onboardingData) {
+            this.showOnboardingModal();
         }
+    }
 
+    showOnboardingModal() {
+        // Ouvrir l'onboarding dans un nouvel onglet
+        window.open('/onboarding.html', '_blank', 'width=800,height=600');
+        
+        // Vérifier périodiquement si l'onboarding est terminé
+        const checkInterval = setInterval(() => {
+            const onboardingData = localStorage.getItem('coachbot_onboarding');
+            if (onboardingData) {
+                clearInterval(checkInterval);
+                this.updateUserInfo();
+                location.reload(); // Recharger pour synchroniser
+            }
+        }, 1000);
+    }
+
+    showSettings() {
+        const onboardingData = localStorage.getItem('coachbot_onboarding');
+        
+        if (onboardingData) {
+            const profile = JSON.parse(onboardingData);
+            const modalContent = `
+                <div class="settings-modal" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 10000; display: flex; align-items: center; justify-content: center;">
+                    <div style="background: white; padding: 30px; border-radius: 15px; max-width: 500px; margin: 20px;">
+                        <h2 style="margin-bottom: 20px; color: #333;">⚙️ Paramètres</h2>
+                        
+                        <div style="margin-bottom: 20px;">
+                            <h3 style="color: #6366F1; margin-bottom: 10px;">Profil utilisateur</h3>
+                            <p><strong>Prénom:</strong> ${profile.prenom}</p>
+                            <p><strong>Âge:</strong> ${profile.age} ans</p>
+                            <p><strong>Objectif:</strong> ${profile.objectif}</p>
+                            <p><strong>Style de coaching:</strong> ${profile.coachingStyle}</p>
+                            <p><strong>Niveau actuel:</strong> ${profile.niveauActuel}/10</p>
+                        </div>
+                        
+                        <div style="display: flex; gap: 10px; justify-content: center;">
+                            <button onclick="coachBot.redoOnboarding()" style="background: #6366F1; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">
+                                🔄 Refaire l'onboarding
+                            </button>
+                            <button onclick="coachBot.closeSettings()" style="background: #64748B; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">
+                                Fermer
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalContent);
+        } else {
+            alert('Aucun profil configuré. Veuillez compléter l\'onboarding d\'abord.');
+            this.showOnboardingModal();
+        }
+    }
+
+    redoOnboarding() {
+        localStorage.removeItem('coachbot_onboarding');
+        this.closeSettings();
+        this.showOnboardingModal();
+    }
+
+    closeSettings() {
+        const modal = document.querySelector('.settings-modal');
+        if (modal) {
+            modal.remove();
+        }
+    }
+
+    switchToDay(day) {
+        this.currentDay = day;
+        document.querySelectorAll('.day-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.querySelector(`[data-day="${day}"]`).classList.add('active');
+        
+        document.querySelector('.day-title').textContent = `Jour ${day} - Transformation`;
+        this.loadMessages();
+    }
+
+    async login(email, password) {
         try {
             const response = await fetch('/api/auth/login', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json'
+                },
                 body: JSON.stringify({ email, password })
             });
 
@@ -538,178 +528,194 @@ class CoachBot {
 
             if (response.ok) {
                 this.token = data.token;
-                localStorage.setItem('coachbot_token', this.token);
                 this.user = data.user;
+                localStorage.setItem('coachbot_token', this.token);
+                localStorage.setItem('coachbot_user', JSON.stringify(this.user));
+                
                 this.serverMode = true;
-                this.hideAuthModal();
                 this.updateUserInfo();
-                this.loadChatHistory();
-                setTimeout(() => this.showWelcomeMessage(), 2000);
+                this.hideAuthModal();
+                
+                // 🎯 SYNCHRONISER L'ONBOARDING AVEC LE SERVEUR
+                await this.syncOnboardingToServer();
+                
+                await this.showWelcomeMessage();
             } else {
-                this.showError(data.message || 'Erreur de connexion');
+                alert(data.error || 'Erreur de connexion');
             }
         } catch (error) {
-            this.user = { email: email, prenom: email.split('@')[0], role: 'user' };
-            this.serverMode = false;
-            this.hideAuthModal();
-            this.updateUserInfo();
-            setTimeout(() => this.showWelcomeMessage(), 2000);
+            console.error('Erreur login:', error);
+            this.activateLocalMode();
+            await this.showWelcomeMessage();
         }
     }
 
-    async register() {
-        const email = document.getElementById('registerEmail').value;
-        const password = document.getElementById('registerPassword').value;
-
-        if (!email || !password) {
-            this.showError('Email et mot de passe requis');
-            return;
-        }
-
+    async register(email, password, name) {
         try {
             const response = await fetch('/api/auth/register', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password })
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email, password, name })
             });
 
             const data = await response.json();
 
             if (response.ok) {
                 this.token = data.token;
-                localStorage.setItem('coachbot_token', this.token);
                 this.user = data.user;
+                localStorage.setItem('coachbot_token', this.token);
+                localStorage.setItem('coachbot_user', JSON.stringify(this.user));
+                
                 this.serverMode = true;
-                this.hideAuthModal();
                 this.updateUserInfo();
-                this.loadChatHistory();
-                setTimeout(() => this.showWelcomeMessage(), 2000);
+                this.hideAuthModal();
+                await this.showWelcomeMessage();
             } else {
-                this.showError(data.message || 'Erreur d\'inscription');
+                alert(data.error || 'Erreur d\'inscription');
             }
         } catch (error) {
-            this.user = { email: email, prenom: email.split('@')[0], role: 'user' };
-            this.serverMode = false;
-            this.hideAuthModal();
-            this.updateUserInfo();
-            setTimeout(() => this.showWelcomeMessage(), 2000);
+            console.error('Erreur register:', error);
+            this.activateLocalMode();
+            await this.showWelcomeMessage();
         }
-    }
-
-    async showWelcomeMessage() {
-        const welcomeMessage = {
-            role: 'ai',
-            message: '',
-            date: new Date().toISOString()
-        };
-        
-        this.addMessageToChat(welcomeMessage, false);
-        this.currentStreamingMessage = document.querySelector('.message:last-child .message-content');
-        
-        let welcomeText;
-        
-        if (this.onboardingData && this.onboardingData.prenom) {
-            const prenom = this.onboardingData.prenom;
-            const objectif = this.onboardingData.objectif;
-            
-            welcomeText = `Assalamu alaykum ${prenom} ! 🤲🏻
-
-Ravi de te retrouver ! Je me souviens que tu souhaites progresser sur ${this.getObjectifText(objectif)}.
-
-Comment s'est passée ta journée ? Es-tu prêt(e) à continuer notre travail ensemble ?`;
-        } else {
-            welcomeText = `Assalamu alaykum ! 🤲🏻
-
-Je suis CoachBot, ton coach personnel pour 15 jours de transformation.
-
-Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites progresser ?`;
-        }
-        
-        await this.typeMessage(welcomeText, false);
-    }
-
-    getObjectifText(objectif) {
-        const objectifs = {
-            'salat': 'l\'amélioration de ta salat',
-            'coran': 'ta relation avec le Coran',
-            'dhikr': 'le dhikr et les invocations',
-            'akhlaq': 'ton comportement et tes relations',
-            'sante': 'ta santé physique et spirituelle',
-            'productivite': 'ta productivité et organisation'
-        };
-        return objectifs[objectif] || 'ton développement personnel';
     }
 
     logout() {
         localStorage.removeItem('coachbot_token');
+        localStorage.removeItem('coachbot_user');
         this.token = null;
         this.user = null;
         this.serverMode = false;
-        this.messageCount = 0;
+        this.updateUserInfo();
         this.showAuthModal();
-        document.getElementById('chatMessages').innerHTML = '';
     }
 
-    async loadChatHistory() {
-        if (!this.serverMode) {
-            document.getElementById('chatMessages').innerHTML = '';
-            return;
+    showAuthModal() {
+        this.authModal.style.display = 'flex';
+    }
+
+    hideAuthModal() {
+        this.authModal.style.display = 'none';
+    }
+
+    showLoginForm() {
+        this.loginForm.style.display = 'block';
+        this.registerForm.style.display = 'none';
+    }
+
+    showRegisterForm() {
+        this.loginForm.style.display = 'none';
+        this.registerForm.style.display = 'block';
+    }
+
+    async showWelcomeMessage() {
+        const onboardingData = localStorage.getItem('coachbot_onboarding');
+        let welcomeMessage = "As-salāmu ʿalaykum ! 🤲🏻 Je suis CoachBot, ton coach personnel pour ces 15 jours de transformation. Comment puis-je t'aider aujourd'hui ?";
+        
+        if (onboardingData) {
+            const profile = JSON.parse(onboardingData);
+            welcomeMessage = `As-salāmu ʿalaykum ${profile.prenom} ! 🤲🏻 Ravi de te retrouver ! Je me souviens que tu souhaites progresser sur l'amélioration de ta ${profile.objectif}. Comment s'est passée ta journée ? Es-tu prêt(e) à continuer notre travail ensemble ?`;
         }
 
-        try {
-            const response = await fetch(`/api/chat/history?day=${this.currentDay}`, {
-                headers: { 'Authorization': `Bearer ${this.token}` }
-            });
+        this.addMessage(welcomeMessage, 'ai');
+    }
 
-            if (response.ok) {
-                const messages = await response.json();
-                this.displayChatHistory(messages);
-                this.messageCount = messages.length;
+    async loadMessages() {
+        try {
+            if (this.serverMode) {
+                const response = await fetch(`/api/chat/history?day=${this.currentDay}`, {
+                    headers: {
+                        'Authorization': `Bearer ${this.token}`
+                    }
+                });
+
+                if (response.ok) {
+                    const messages = await response.json();
+                    this.displayMessages(messages);
+                } else {
+                    this.loadLocalMessages();
+                }
             } else {
-                document.getElementById('chatMessages').innerHTML = '';
+                this.loadLocalMessages();
             }
         } catch (error) {
-            document.getElementById('chatMessages').innerHTML = '';
+            console.error('Erreur chargement messages:', error);
+            this.loadLocalMessages();
         }
     }
 
-    displayChatHistory(messages) {
-        const chatMessages = document.getElementById('chatMessages');
-        chatMessages.innerHTML = '';
+    loadLocalMessages() {
+        const messages = JSON.parse(localStorage.getItem(`coachbot_day${this.currentDay}`) || '[]');
+        this.displayMessages(messages);
+    }
 
+    displayMessages(messages) {
+        this.chatMessages.innerHTML = '';
         messages.forEach(msg => {
-            this.addMessageToChat(msg, false, false);
+            this.addMessage(msg.message, msg.role, false);
         });
-
         this.scrollToBottom();
     }
 
+    addMessage(content, role, save = true) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${role}-message`;
+        
+        const timestamp = new Date().toLocaleTimeString('fr-FR', { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+        });
+
+        messageDiv.innerHTML = `
+            <div class="message-content">${content}</div>
+            <div class="message-time">${timestamp}</div>
+        `;
+
+        this.chatMessages.appendChild(messageDiv);
+        this.scrollToBottom();
+
+        if (save) {
+            this.saveMessage(content, role);
+        }
+    }
+
+    async saveMessage(message, role) {
+        try {
+            if (this.serverMode) {
+                await fetch('/api/chat/save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${this.token}`
+                    },
+                    body: JSON.stringify({
+                        day: this.currentDay,
+                        message,
+                        role
+                    })
+                });
+            } else {
+                const messages = JSON.parse(localStorage.getItem(`coachbot_day${this.currentDay}`) || '[]');
+                messages.push({
+                    message,
+                    role,
+                    date: new Date().toISOString()
+                });
+                localStorage.setItem(`coachbot_day${this.currentDay}`, JSON.stringify(messages));
+            }
+        } catch (error) {
+            console.error('Erreur sauvegarde message:', error);
+        }
+    }
+
     async sendMessage() {
-        const input = document.getElementById('userInput');
-        const message = input.value.trim();
+        const message = this.messageInput.value.trim();
+        if (!message) return;
 
-        if (!message || this.isLoading) return;
-
-        input.value = '';
-        this.isLoading = true;
-        this.messageCount++;
-
-        const userMessage = {
-            role: 'user',
-            message: message,
-            date: new Date().toISOString()
-        };
-
-        this.addMessageToChat(userMessage, this.serverMode);
-
-        const aiMessage = {
-            role: 'ai',
-            message: '',
-            date: new Date().toISOString()
-        };
-
-        this.addMessageToChat(aiMessage, false);
-        this.currentStreamingMessage = document.querySelector('.message:last-child .message-content');
+        this.addMessage(message, 'user');
+        this.messageInput.value = '';
 
         try {
             if (this.serverMode) {
@@ -719,83 +725,15 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
             }
         } catch (error) {
             if (this.serverMode) {
+                console.log('Erreur serveur, basculement en mode local');
                 this.serverMode = false;
                 this.updateUserInfo();
                 await this.simulateAIResponse(message);
             }
         }
-
-        this.isLoading = false;
     }
 
-    async simulateAIResponse(userMessage) {
-        // Analyser le message utilisateur pour plus de contexte
-        const lowerMessage = userMessage.toLowerCase();
-        let selectedResponse;
-        
-        if (this.onboardingData) {
-            const prenom = this.onboardingData.prenom;
-            const objectif = this.onboardingData.objectif;
-            const style = this.onboardingData.style || 'equilibre';
-            
-            // Réponses contextuelles selon le message
-            if (lowerMessage.includes('niveau') || lowerMessage.includes('échelle')) {
-                selectedResponse = `Merci ${prenom} pour cette évaluation. Sur cette base, je vais adapter mes conseils. Pour ${this.getObjectifText(objectif)}, commençons par identifier tes moments les plus favorables dans la journée.`;
-            } else if (lowerMessage.includes('toujours') || lowerMessage.includes('répète')) {
-                selectedResponse = `Je comprends ${prenom}, laisse-moi te poser une question différente : quelle a été ta plus belle réussite concernant ${this.getObjectifText(objectif)} ces derniers temps ?`;
-            } else if (lowerMessage.includes('défi') || lowerMessage.includes('problème')) {
-                selectedResponse = `C'est très lucide de ta part ${prenom}. Ce défi que tu mentionnes, peux-tu me dire depuis quand tu le rencontres ? Cela m'aiderait à mieux t'accompagner.`;
-            } else {
-                // Réponses variées selon le style
-                const responses = {
-                    'doux': [
-                        `${prenom}, je sens ta sincérité. Chaque personne a son rythme pour ${this.getObjectifText(objectif)}. Quelle petite action pourrais-tu faire demain matin ?`,
-                        `C'est formidable ${prenom} ! Ta motivation pour ${this.getObjectifText(objectif)} me touche. Dis-moi, à quel moment de la journée te sens-tu le plus énergique ?`,
-                        `${prenom}, ta démarche est déjà un grand pas. Pour ${this.getObjectifText(objectif)}, commençons ensemble par identifier tes forces actuelles.`
-                    ],
-                    'direct': [
-                        `Excellent ${prenom} ! Maintenant, soyons concrets pour ${this.getObjectifText(objectif)}. Quelle action précise vas-tu poser dans les 24 prochaines heures ?`,
-                        `Parfait ${prenom} ! J'aime cette détermination. Pour ${this.getObjectifText(objectif)}, fixons-nous un objectif mesurable pour cette semaine.`,
-                        `Très bien ${prenom} ! Passons à l'action pour ${this.getObjectifText(objectif)}. Quel est ton plus grand obstacle en ce moment ?`
-                    ],
-                    'equilibre': [
-                        `Merci ${prenom} pour ce partage. Pour ${this.getObjectifText(objectif)}, explorons ensemble tes habitudes actuelles. Que fais-tu déjà bien ?`,
-                        `C'est très intéressant ${prenom}. Concernant ${this.getObjectifText(objectif)}, j'aimerais comprendre ton contexte. Ton entourage te soutient-il ?`,
-                        `${prenom}, ta réflexion sur ${this.getObjectifText(objectif)} montre ta maturité. Peux-tu me parler de ta routine matinale ?`
-                    ]
-                };
-                
-                const styleResponses = responses[style] || responses['equilibre'];
-                selectedResponse = styleResponses[Math.floor(Math.random() * styleResponses.length)];
-            }
-        } else {
-            // Réponses pour utilisateurs sans onboarding
-            if (lowerMessage.includes('selim') || lowerMessage.includes('sélim')) {
-                selectedResponse = `Ahlan wa sahlan Selim ! 🤲🏻 Ravi de faire ta connaissance. Quel est l'objectif principal sur lequel tu souhaites progresser ?`;
-            } else if (lowerMessage.includes('salat') || lowerMessage.includes('prière')) {
-                selectedResponse = `MashaAllah ! La salat est effectivement le pilier central. Pour mieux t'accompagner, peux-tu me dire ton prénom et sur quel aspect précis tu veux progresser ?`;
-            } else {
-                const responses = [
-                    `Barak Allahu fik pour ce partage ! Pour mieux te guider, dis-moi ton prénom et ton objectif principal.`,
-                    `SubhanAllah ! Je comprends ta motivation. Commençons par les bases : comment t'appelles-tu et que souhaites-tu améliorer ?`,
-                    `Qu'Allah facilite ton cheminement ! J'ai besoin de te connaître un peu : ton prénom et ton objectif prioritaire ?`
-                ];
-                selectedResponse = responses[Math.floor(Math.random() * responses.length)];
-            }
-        }
-        
-        // Effet de frappe
-        for (let i = 0; i < selectedResponse.length; i++) {
-            if (!this.currentStreamingMessage) break;
-            this.currentStreamingMessage.textContent += selectedResponse[i];
-            this.scrollToBottom();
-            await new Promise(resolve => setTimeout(resolve, 30));
-        }
-        
-        // PAS de lecture vocale automatique
-    }
-
-    async streamAIResponse(userMessage) {
+    async streamAIResponse(message) {
         const response = await fetch('/api/chat/message', {
             method: 'POST',
             headers: {
@@ -803,179 +741,180 @@ Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites prog
                 'Authorization': `Bearer ${this.token}`
             },
             body: JSON.stringify({
-                message: userMessage,
+                message,
                 day: this.currentDay
             })
         });
 
         if (!response.ok) {
-            throw new Error(`Erreur serveur: ${response.status}`);
+            throw new Error('Erreur serveur');
         }
 
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message ai-message';
+        
+        const timestamp = new Date().toLocaleTimeString('fr-FR', { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+        });
+
+        messageDiv.innerHTML = `
+            <div class="message-content"></div>
+            <div class="message-time">${timestamp}</div>
+        `;
+
+        this.chatMessages.appendChild(messageDiv);
+        this.currentStreamingMessage = messageDiv.querySelector('.message-content');
+        
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-        let buffer = '';
+        let fullResponse = '';
 
         while (true) {
-            const { value, done } = await reader.read();
+            const { done, value } = await reader.read();
             if (done) break;
 
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop();
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
 
             for (const line of lines) {
                 if (line.startsWith('data: ')) {
                     const data = line.slice(6);
                     if (data === '[DONE]') {
-                        // PAS de lecture vocale automatique
+                        this.saveMessage(fullResponse, 'ai');
+                        this.currentStreamingMessage = null;
                         return;
                     }
 
                     try {
                         const parsed = JSON.parse(data);
                         if (parsed.content) {
-                            await this.typeMessage(parsed.content, true);
+                            fullResponse += parsed.content;
+                            this.currentStreamingMessage.textContent = fullResponse;
+                            this.scrollToBottom();
                         }
                     } catch (e) {
-                        // Ignorer erreurs parsing JSON
+                        // Ignorer les erreurs de parsing
                     }
                 }
             }
         }
     }
 
-    async typeMessage(text, isStreaming = false) {
-        if (!this.currentStreamingMessage) return;
+    async simulateAIResponse(message) {
+        const onboardingData = localStorage.getItem('coachbot_onboarding');
+        const userMessage = message.toLowerCase();
+        this.messageCounter++;
 
-        if (isStreaming) {
-            this.currentStreamingMessage.textContent += text;
-        } else {
-            for (let i = 0; i < text.length; i++) {
-                if (!this.currentStreamingMessage) break;
-                this.currentStreamingMessage.textContent += text[i];
-                this.scrollToBottom();
-                await new Promise(resolve => setTimeout(resolve, 20));
+        // Réponses contextuelles selon l'onboarding et le message
+        let responses = [];
+
+        if (onboardingData) {
+            const profile = JSON.parse(onboardingData);
+            const style = profile.coachingStyle || 'bienveillant';
+            
+            // Réponses selon le style de coaching
+            if (style === 'motivant') {
+                responses = [
+                    `Excellent ${profile.prenom} ! 💪 Je vois ta détermination pour améliorer ta ${profile.objectif}. Quelle micro-action vas-tu faire aujourd'hui pour progresser ?`,
+                    `Mashallah ${profile.prenom} ! 🌟 Ton engagement est inspirant. Dis-moi, sur une échelle de 1 à 10, comment évalues-tu ton niveau actuel aujourd'hui ?`,
+                    `Bravo ${profile.prenom} ! 🚀 Chaque pas compte dans ton parcours vers une meilleure ${profile.objectif}. Quel défi veux-tu relever maintenant ?`
+                ];
+            } else if (style === 'structured') {
+                responses = [
+                    `Bonjour ${profile.prenom}. 📋 Analysons ensemble ta progression sur l'objectif "${profile.objectif}". Peux-tu me donner 3 éléments concrets de ta situation actuelle ?`,
+                    `${profile.prenom}, établissons un plan clair. 📊 Concernant ta ${profile.objectif}, quels sont tes 3 leviers principaux et tes 3 obstacles actuels ?`,
+                    `Parfait ${profile.prenom}. 🎯 Définissons des critères de réussite mesurables pour ta ${profile.objectif}. Que signifierait "réussir" pour toi ?`
+                ];
+            } else {
+                responses = [
+                    `Barakallahu fik ${profile.prenom} 🤲🏻 Je t'accompagne avec bienveillance dans ton cheminement vers une meilleure ${profile.objectif}. Comment te sens-tu aujourd'hui ?`,
+                    `As-salāmu ʿalaykum ${profile.prenom} 🤲🏻 Prends ton temps, chaque étape compte. Concernant ta ${profile.objectif}, quelle petite victoire peux-tu célébrer aujourd'hui ?`,
+                    `Qu'Allah facilite ton parcours ${profile.prenom} ✨ Je suis là pour t'encourager dans l'amélioration de ta ${profile.objectif}. Raconte-moi comment ça se passe pour toi.`
+                ];
             }
+        } else {
+            // Réponses par défaut si pas d'onboarding
+            responses = [
+                "As-salāmu ʿalaykum ! 🤲🏻 Pour mieux t'accompagner, peux-tu me dire ton prénom et me partager le défi principal sur lequel tu souhaites progresser ?",
+                "Barakallahu fik ! Je suis là pour t'aider dans ton développement personnel. Dis-moi, quel est ton objectif prioritaire en ce moment ?",
+                "Qu'Allah te facilite ! ✨ Chaque parcours de transformation commence par une intention claire. Quelle est la tienne ?"
+            ];
+        }
+
+        // Réponses selon mots-clés
+        if (userMessage.includes('niveau') || userMessage.includes('évalue')) {
+            responses.push("Sur une échelle de 1 à 10, comment évalues-tu ton niveau actuel ? Et dis-moi ce qui te ferait passer au niveau supérieur.");
         }
         
-        this.scrollToBottom();
-    }
+        if (userMessage.includes('difficile') || userMessage.includes('obstacle')) {
+            responses.push("Je comprends que ce soit difficile. 🤲🏻 Identifions ensemble le plus petit pas possible que tu peux faire aujourd'hui. Quelle micro-action de 10 minutes maximum ?");
+        }
+        
+        if (userMessage.includes('oui') || userMessage.includes('d\'accord') || userMessage.includes('ameen')) {
+            responses.push("Excellent ! 🌟 Maintenant, fixons-nous un critère de réussite concret. Comment saurais-tu que tu as progressé d'ici ce soir ?");
+        }
 
-    addMessageToChat(message, save = true, scroll = true) {
-        const chatMessages = document.getElementById('chatMessages');
-        const messageEl = document.createElement('div');
-        messageEl.className = `message ${message.role}`;
+        // Éviter les répétitions
+        const usedKey = `used_responses_day${this.currentDay}`;
+        const usedResponses = JSON.parse(localStorage.getItem(usedKey) || '[]');
+        const availableResponses = responses.filter(r => !usedResponses.includes(r));
+        
+        let selectedResponse;
+        if (availableResponses.length > 0) {
+            selectedResponse = availableResponses[Math.floor(Math.random() * availableResponses.length)];
+            usedResponses.push(selectedResponse);
+            localStorage.setItem(usedKey, JSON.stringify(usedResponses.slice(-5))); // Garder 5 dernières
+        } else {
+            // Reset si toutes utilisées
+            selectedResponse = responses[0];
+            localStorage.setItem(usedKey, JSON.stringify([selectedResponse]));
+        }
 
-        const time = new Date(message.date).toLocaleTimeString('fr-FR', {
-            hour: '2-digit',
-            minute: '2-digit'
+        // Simulation du streaming
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message ai-message';
+        
+        const timestamp = new Date().toLocaleTimeString('fr-FR', { 
+            hour: '2-digit', 
+            minute: '2-digit' 
         });
 
-        messageEl.innerHTML = `
-            <div class="message-content">${message.message}</div>
-            <div class="message-time">${time}</div>
+        messageDiv.innerHTML = `
+            <div class="message-content"></div>
+            <div class="message-time">${timestamp}</div>
         `;
 
-        chatMessages.appendChild(messageEl);
-
-        if (scroll) {
-            this.scrollToBottom();
-        }
-
-        if (save && this.serverMode && this.token) {
-            this.saveMessage(message);
-        }
+        this.chatMessages.appendChild(messageDiv);
+        const contentDiv = messageDiv.querySelector('.message-content');
+        
+        // Animation de frappe
+        let i = 0;
+        const typeWriter = () => {
+            if (i < selectedResponse.length) {
+                contentDiv.textContent += selectedResponse.charAt(i);
+                i++;
+                this.scrollToBottom();
+                setTimeout(typeWriter, 30);
+            } else {
+                this.saveMessage(selectedResponse, 'ai');
+            }
+        };
+        
+        setTimeout(typeWriter, 500);
     }
 
-    async saveMessage(message) {
-        try {
-            await fetch('/api/chat/save', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${this.token}`
-                },
-                body: JSON.stringify({
-                    ...message,
-                    day: this.currentDay
-                })
-            });
-        } catch (error) {
-            console.warn('Erreur sauvegarde message:', error);
-        }
+    getLastAiMessage() {
+        const aiMessages = this.chatMessages.querySelectorAll('.ai-message .message-content');
+        return aiMessages.length > 0 ? aiMessages[aiMessages.length - 1].textContent : null;
     }
 
     scrollToBottom() {
-        const chatMessages = document.getElementById('chatMessages');
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-
-    showError(message) {
-        const error = document.createElement('div');
-        error.className = 'error-notification';
-        error.textContent = message;
-        error.style.cssText = `
-            position: fixed; top: 20px; right: 20px; background: #ff4444;
-            color: white; padding: 12px 20px; border-radius: 8px; z-index: 10000;
-            animation: slideIn 0.3s ease; max-width: 300px;
-        `;
-
-        document.body.appendChild(error);
-        setTimeout(() => error.remove(), 4000);
-    }
-
-    showSettings() {
-        const modal = document.createElement('div');
-        modal.style.cssText = `
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.5); display: flex; align-items: center;
-            justify-content: center; z-index: 10000;
-        `;
-
-        modal.innerHTML = `
-            <div style="background: white; padding: 30px; border-radius: 15px;
-                max-width: 400px; margin: 20px;">
-                <h3 style="margin-bottom: 20px; color: #333;">⚙️ Paramètres</h3>
-                
-                ${this.onboardingData ? `
-                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-                    <h4 style="color: #667eea; margin-bottom: 10px;">Ton Profil :</h4>
-                    <p><strong>Prénom :</strong> ${this.onboardingData.prenom}</p>
-                    <p><strong>Objectif :</strong> ${this.getObjectifText(this.onboardingData.objectif)}</p>
-                    <p><strong>Style :</strong> ${this.onboardingData.style}</p>
-                </div>
-                ` : ''}
-                
-                <button onclick="window.coachBot.resetOnboarding()" style="
-                    background: #667eea; color: white; border: none; padding: 10px 20px;
-                    border-radius: 8px; cursor: pointer; width: 100%; margin-bottom: 10px;
-                ">🔄 Refaire l'introduction</button>
-                
-                <button onclick="this.parentElement.parentElement.remove()" style="
-                    background: #f8f9fa; color: #666; border: 1px solid #e9ecef;
-                    padding: 10px 20px; border-radius: 8px; cursor: pointer; width: 100%;
-                ">Fermer</button>
-            </div>
-        `;
-
-        document.body.appendChild(modal);
-    }
-
-    resetOnboarding() {
-        localStorage.removeItem('coachbot_onboarding');
-        localStorage.removeItem('coachbot_onboarding_completed');
-        localStorage.removeItem('coachbot_onboarding_temp');
-        this.onboardingData = null;
-        this.showOnboardingRedirect();
-    }
-
-    loadSettings() {
-        console.log('CoachBot initialisé en mode', this.serverMode ? 'serveur' : 'local');
+        this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
     }
 }
 
-// Modifier les fonctions globales
+// Fonctions globales pour les boutons vocaux
 function toggleVoice() {
     if (window.coachBot && window.coachBot.voiceManager) {
         window.coachBot.voiceManager.toggleRecording();
@@ -984,32 +923,25 @@ function toggleVoice() {
 
 function stopSpeaking() {
     if (window.coachBot && window.coachBot.voiceManager) {
-        // Si pas en lecture, lire le dernier message
-        if (!window.coachBot.voiceManager.isPlaying) {
-            window.coachBot.voiceManager.speakLastAIMessage();
-        } else {
-            window.coachBot.voiceManager.stopSpeaking();
-        }
+        window.coachBot.voiceManager.toggleSpeaker();
     }
 }
 
-// Initialisation au chargement
-window.addEventListener('DOMContentLoaded', () => {
-    window.coachBot = new CoachBot();
-});
+// Fonction globale pour les paramètres
+function showSettings() {
+    if (window.coachBot) {
+        window.coachBot.showSettings();
+    }
+}
 
-// Styles animation pour notification
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes slideIn {
-        from { transform: translateX(100%); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
-    }
+// Initialisation
+document.addEventListener('DOMContentLoaded', () => {
+    window.coachBot = new CoachBot();
     
-    @keyframes pulse {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.1); }
-        100% { transform: scale(1); }
-    }
-`;
-document.head.appendChild(style);
+    // Charger les voix après un délai
+    setTimeout(() => {
+        if (window.speechSynthesis) {
+            window.speechSynthesis.getVoices();
+        }
+    }, 1000);
+});
