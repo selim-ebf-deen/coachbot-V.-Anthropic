@@ -361,3 +361,447 @@ class CoachBot {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                this.token = data.token;
+                localStorage.setItem('coachbot_token', this.token);
+                this.user = data.user;
+                this.serverMode = true;
+                this.hideAuthModal();
+                this.updateUserInfo();
+                this.loadChatHistory();
+                setTimeout(() => this.showWelcomeMessage(), 2000);
+            } else {
+                this.showError(data.message || 'Erreur de connexion');
+            }
+        } catch (error) {
+            this.user = { email: email, prenom: email.split('@')[0], role: 'user' };
+            this.serverMode = false;
+            this.hideAuthModal();async register() {
+        const email = document.getElementById('registerEmail').value;
+        const password = document.getElementById('registerPassword').value;
+
+        if (!email || !password) {
+            this.showError('Email et mot de passe requis');
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/auth/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                this.token = data.token;
+                localStorage.setItem('coachbot_token', this.token);
+                this.user = data.user;
+                this.serverMode = true;
+                this.hideAuthModal();
+                this.updateUserInfo();
+                this.loadChatHistory();
+                setTimeout(() => this.showWelcomeMessage(), 2000);
+            } else {
+                this.showError(data.message || 'Erreur d\'inscription');
+            }
+        } catch (error) {
+            this.user = { email: email, prenom: email.split('@')[0], role: 'user' };
+            this.serverMode = false;
+            this.hideAuthModal();
+            this.updateUserInfo();
+            setTimeout(() => this.showWelcomeMessage(), 2000);
+        }
+    }
+
+    async showWelcomeMessage() {
+        const welcomeMessage = {
+            role: 'ai',
+            message: '',
+            date: new Date().toISOString()
+        };
+        
+        this.addMessageToChat(welcomeMessage, false);
+        this.currentStreamingMessage = document.querySelector('.message:last-child .message-content');
+        
+        let welcomeText;
+        
+        if (this.onboardingData && this.onboardingData.prenom) {
+            const prenom = this.onboardingData.prenom;
+            const objectif = this.onboardingData.objectif;
+            
+            welcomeText = `Assalamu alaykum ${prenom} ! 🤲🏻
+
+Ravi de te retrouver ! Je me souviens que tu souhaites progresser sur ${this.getObjectifText(objectif)}.
+
+Comment s'est passée ta journée ? Es-tu prêt(e) à continuer notre travail ensemble ?`;
+        } else {
+            welcomeText = `Assalamu alaykum ! 🤲🏻
+
+Je suis CoachBot, ton coach personnel pour 15 jours de transformation.
+
+Peux-tu me dire ton prénom et l'objectif principal sur lequel tu souhaites progresser ?`;
+        }
+        
+        await this.typeMessage(welcomeText, false);
+    }
+
+    getObjectifText(objectif) {
+        const objectifs = {
+            'salat': 'l\'amélioration de ta salat',
+            'coran': 'ta relation avec le Coran',
+            'dhikr': 'le dhikr et les invocations',
+            'akhlaq': 'ton comportement et tes relations',
+            'sante': 'ta santé physique et spirituelle',
+            'productivite': 'ta productivité et organisation'
+        };
+        return objectifs[objectif] || 'ton développement personnel';
+    }
+
+    logout() {
+        localStorage.removeItem('coachbot_token');
+        this.token = null;
+        this.user = null;
+        this.serverMode = false;
+        this.showAuthModal();
+        document.getElementById('chatMessages').innerHTML = '';
+    }
+
+    async loadChatHistory() {
+        if (!this.serverMode) {
+            document.getElementById('chatMessages').innerHTML = '';
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/chat/history?day=${this.currentDay}`, {
+                headers: { 'Authorization': `Bearer ${this.token}` }
+            });
+
+            if (response.ok) {
+                const messages = await response.json();
+                this.displayChatHistory(messages);
+            } else {
+                document.getElementById('chatMessages').innerHTML = '';
+            }
+        } catch (error) {
+            document.getElementById('chatMessages').innerHTML = '';
+        }
+    }
+
+    displayChatHistory(messages) {
+        const chatMessages = document.getElementById('chatMessages');
+        chatMessages.innerHTML = '';
+
+        messages.forEach(msg => {
+            this.addMessageToChat(msg, false, false);
+        });
+
+        this.scrollToBottom();
+    }
+
+    async sendMessage() {
+        const input = document.getElementById('userInput');
+        const message = input.value.trim();
+
+        if (!message || this.isLoading) return;
+
+        input.value = '';
+        this.isLoading = true;
+
+        const userMessage = {
+            role: 'user',
+            message: message,
+            date: new Date().toISOString()
+        };
+
+        this.addMessageToChat(userMessage, this.serverMode);
+
+        const aiMessage = {
+            role: 'ai',
+            message: '',
+            date: new Date().toISOString()
+        };
+
+        this.addMessageToChat(aiMessage, false);
+        this.currentStreamingMessage = document.querySelector('.message:last-child .message-content');
+
+        try {
+            if (this.serverMode) {
+                await this.streamAIResponse(message);
+            } else {
+                await this.simulateAIResponse(message);
+            }
+        } catch (error) {
+            if (this.serverMode) {
+                this.serverMode = false;
+                this.updateUserInfo();
+                await this.simulateAIResponse(message);
+            }
+        }
+
+        this.isLoading = false;
+    }
+
+    async simulateAIResponse(userMessage) {
+        let selectedResponse;
+        
+        if (this.onboardingData) {
+            const prenom = this.onboardingData.prenom;
+            const objectif = this.onboardingData.objectif;
+            const style = this.onboardingData.style || 'equilibre';
+            
+            if (style === 'doux') {
+                selectedResponse = `${prenom}, je comprends parfaitement ce que tu ressens. C'est tout à fait normal d'avoir ces défis avec ${this.getObjectifText(objectif)}. Prends ton temps, chaque petit pas compte énormément. Qu'est-ce qui t'a motivé aujourd'hui ?`;
+            } else if (style === 'direct') {
+                selectedResponse = `Très bien ${prenom} ! J'aime ta détermination concernant ${this.getObjectifText(objectif)}. Maintenant, passons à l'action concrète. Quelle est la première chose que tu vas faire aujourd'hui pour avancer ?`;
+            } else {
+                selectedResponse = `Parfait ${prenom} ! Je vois que tu es motivé(e) pour ${this.getObjectifText(objectif)}. C'est exactement l'état d'esprit qu'il faut. Dis-moi, quel a été ton plus grand défi hier ?`;
+            }
+        } else {
+            const responses = [
+                `Barakatou ! C'est un excellent objectif. Pour mieux t'accompagner, peux-tu me dire ton prénom ?`,
+                `MashaAllah ! Je comprends ta motivation. Sur une échelle de 1 à 10, comment évalues-tu ta situation actuelle ?`,
+                `Qu'Allah facilite ton cheminement ! Dis-moi, qu'est-ce qui t'empêche le plus de réussir en ce moment ?`
+            ];
+            selectedResponse = responses[Math.floor(Math.random() * responses.length)];
+        }
+        
+        for (let i = 0; i < selectedResponse.length; i++) {
+            if (!this.currentStreamingMessage) break;
+            this.currentStreamingMessage.textContent += selectedResponse[i];
+            this.scrollToBottom();
+            await new Promise(resolve => setTimeout(resolve, 30));
+        }
+        
+        setTimeout(() => {
+            if (this.voiceManager) {
+                this.voiceManager.speakText(selectedResponse);
+            }
+        }, 500);
+    }
+
+    async streamAIResponse(userMessage) {
+        const response = await fetch('/api/chat/message', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${this.token}`
+            },
+            body: JSON.stringify({
+                message: userMessage,
+                day: this.currentDay
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`Erreur serveur: ${response.status}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    const data = line.slice(6);
+                    if (data === '[DONE]') {
+                        const finalText = this.currentStreamingMessage?.textContent;
+                        if (finalText && finalText.trim()) {
+                            setTimeout(() => {
+                                if (this.voiceManager) {
+                                    this.voiceManager.speakText(finalText);
+                                }
+                            }, 500);
+                        }
+                        return;
+                    }
+
+                    try {
+                        const parsed = JSON.parse(data);
+                        if (parsed.content) {
+                            await this.typeMessage(parsed.content, true);
+                        }
+                    } catch (e) {
+                        // Ignorer erreurs parsing JSON
+                    }
+                }
+            }
+        }
+    }
+
+    async typeMessage(text, isStreaming = false) {
+        if (!this.currentStreamingMessage) return;
+
+        if (isStreaming) {
+            this.currentStreamingMessage.textContent += text;
+        } else {
+            for (let i = 0; i < text.length; i++) {
+                if (!this.currentStreamingMessage) break;
+                this.currentStreamingMessage.textContent += text[i];
+                this.scrollToBottom();
+                await new Promise(resolve => setTimeout(resolve, 20));
+            }
+        }
+        
+        this.scrollToBottom();
+    }
+
+    addMessageToChat(message, save = true, scroll = true) {
+        const chatMessages = document.getElementById('chatMessages');
+        const messageEl = document.createElement('div');
+        messageEl.className = `message ${message.role}`;
+
+        const time = new Date(message.date).toLocaleTimeString('fr-FR', {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
+        messageEl.innerHTML = `
+            <div class="message-content">${message.message}</div>
+            <div class="message-time">${time}</div>
+        `;
+
+        chatMessages.appendChild(messageEl);
+
+        if (scroll) {
+            this.scrollToBottom();
+        }
+
+        if (save && this.serverMode && this.token) {
+            this.saveMessage(message);
+        }
+    }
+
+    async saveMessage(message) {
+        try {
+            await fetch('/api/chat/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.token}`
+                },
+                body: JSON.stringify({
+                    ...message,
+                    day: this.currentDay
+                })
+            });
+        } catch (error) {
+            console.warn('Erreur sauvegarde message:', error);
+        }
+    }
+
+    scrollToBottom() {
+        const chatMessages = document.getElementById('chatMessages');
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    showError(message) {
+        const error = document.createElement('div');
+        error.className = 'error-notification';
+        error.textContent = message;
+        error.style.cssText = `
+            position: fixed; top: 20px; right: 20px; background: #ff4444;
+            color: white; padding: 12px 20px; border-radius: 8px; z-index: 10000;
+            animation: slideIn 0.3s ease; max-width: 300px;
+        `;
+
+        document.body.appendChild(error);
+        setTimeout(() => error.remove(), 4000);
+    }
+
+    showSettings() {
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); display: flex; align-items: center;
+            justify-content: center; z-index: 10000;
+        `;
+
+        modal.innerHTML = `
+            <div style="background: white; padding: 30px; border-radius: 15px;
+                max-width: 400px; margin: 20px;">
+                <h3 style="margin-bottom: 20px; color: #333;">⚙️ Paramètres</h3>
+                
+                ${this.onboardingData ? `
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <h4 style="color: #667eea; margin-bottom: 10px;">Ton Profil :</h4>
+                    <p><strong>Prénom :</strong> ${this.onboardingData.prenom}</p>
+                    <p><strong>Objectif :</strong> ${this.getObjectifText(this.onboardingData.objectif)}</p>
+                    <p><strong>Style :</strong> ${this.onboardingData.style}</p>
+                </div>
+                ` : ''}
+                
+                <button onclick="window.coachBot.resetOnboarding()" style="
+                    background: #667eea; color: white; border: none; padding: 10px 20px;
+                    border-radius: 8px; cursor: pointer; width: 100%; margin-bottom: 10px;
+                ">🔄 Refaire l'introduction</button>
+                
+                <button onclick="this.parentElement.parentElement.remove()" style="
+                    background: #f8f9fa; color: #666; border: 1px solid #e9ecef;
+                    padding: 10px 20px; border-radius: 8px; cursor: pointer; width: 100%;
+                ">Fermer</button>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+    }
+
+    resetOnboarding() {
+        localStorage.removeItem('coachbot_onboarding');
+        localStorage.removeItem('coachbot_onboarding_completed');
+        localStorage.removeItem('coachbot_onboarding_temp');
+        this.onboardingData = null;
+        this.showOnboardingRedirect();
+    }
+
+    loadSettings() {
+        console.log('CoachBot initialisé en mode', this.serverMode ? 'serveur' : 'local');
+    }
+}
+
+// Fonctions globales pour les boutons
+function toggleVoice() {
+    if (window.coachBot && window.coachBot.voiceManager) {
+        window.coachBot.voiceManager.toggleRecording();
+    }
+}
+
+function stopSpeaking() {
+    if (window.coachBot && window.coachBot.voiceManager) {
+        window.coachBot.voiceManager.stopSpeaking();
+    }
+}
+
+// Initialisation au chargement
+window.addEventListener('DOMContentLoaded', () => {
+    window.coachBot = new CoachBot();
+});
+
+// Styles animation pour notification
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+`;
+document.head.appendChild(style);
+            this.updateUserInfo();
+            setTimeout(() => this.showWelcomeMessage(), 2000);
+        }
+    }
+    
