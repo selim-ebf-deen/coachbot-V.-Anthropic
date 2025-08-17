@@ -42,9 +42,11 @@ class VoiceManager {
                 }
 
                 if (finalTranscript) {
-                    this.app.messageInput.value = finalTranscript;
-                    this.hideInterimResult();
-                    this.app.sendMessage();
+                    if (this.app.messageInput) {
+                        this.app.messageInput.value = finalTranscript;
+                        this.hideInterimResult();
+                        this.app.sendMessage();
+                    }
                 }
             };
 
@@ -250,6 +252,14 @@ class CoachBot {
         this.messageCounter = 0;
         this.voiceManager = new VoiceManager(this);
         
+        // Initialiser les éléments du DOM de manière sécurisée
+        this.initDOMElements();
+        this.initEventListeners();
+        this.initApp();
+    }
+
+    initDOMElements() {
+        // Vérifier et initialiser les éléments du DOM
         this.authModal = document.getElementById('auth-modal');
         this.loginForm = document.getElementById('login-form');
         this.registerForm = document.getElementById('register-form');
@@ -257,8 +267,16 @@ class CoachBot {
         this.messageInput = document.getElementById('message-input');
         this.userInfo = document.querySelector('.user-info');
         
-        this.initEventListeners();
-        this.initApp();
+        // Si certains éléments n'existent pas, les créer ou gérer l'erreur
+        if (!this.chatMessages) {
+            console.warn('Element .chat-messages non trouvé');
+        }
+        if (!this.messageInput) {
+            console.warn('Element #message-input non trouvé');
+        }
+        if (!this.userInfo) {
+            console.warn('Element .user-info non trouvé');
+        }
     }
 
     initEventListeners() {
@@ -271,28 +289,46 @@ class CoachBot {
         });
 
         // Formulaires d'authentification
-        this.loginForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const email = document.getElementById('login-email').value;
-            const password = document.getElementById('login-password').value;
-            this.login(email, password);
-        });
+        if (this.loginForm) {
+            this.loginForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const email = document.getElementById('login-email')?.value;
+                const password = document.getElementById('login-password')?.value;
+                if (email && password) {
+                    this.login(email, password);
+                }
+            });
+        }
 
-        this.registerForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const email = document.getElementById('register-email').value;
-            const password = document.getElementById('register-password').value;
-            const name = document.getElementById('register-name').value;
-            this.register(email, password, name);
-        });
+        if (this.registerForm) {
+            this.registerForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const email = document.getElementById('register-email')?.value;
+                const password = document.getElementById('register-password')?.value;
+                const name = document.getElementById('register-name')?.value;
+                if (email && password) {
+                    this.register(email, password, name);
+                }
+            });
+        }
 
         // Envoi de messages
-        this.messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
+        if (this.messageInput) {
+            this.messageInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    this.sendMessage();
+                }
+            });
+        }
+
+        // Bouton envoi
+        const sendBtn = document.getElementById('send-btn');
+        if (sendBtn) {
+            sendBtn.addEventListener('click', () => {
                 this.sendMessage();
-            }
-        });
+            });
+        }
 
         // Bouton déconnexion
         document.addEventListener('click', (e) => {
@@ -309,6 +345,21 @@ class CoachBot {
                 this.showLoginForm();
             }
         });
+
+        // Boutons vocaux
+        const micBtn = document.getElementById('mic-btn');
+        if (micBtn) {
+            micBtn.addEventListener('click', () => {
+                this.voiceManager.toggleRecording();
+            });
+        }
+
+        const speakerBtn = document.getElementById('speaker-btn');
+        if (speakerBtn) {
+            speakerBtn.addEventListener('click', () => {
+                this.voiceManager.toggleSpeaker();
+            });
+        }
     }
 
     async initApp() {
@@ -408,6 +459,8 @@ class CoachBot {
     }
 
     updateUserInfo() {
+        if (!this.userInfo) return;
+
         const onboardingData = localStorage.getItem('coachbot_onboarding');
         let displayName = 'Utilisateur';
         let configBadge = '';
@@ -473,10 +526,10 @@ class CoachBot {
                         </div>
                         
                         <div style="display: flex; gap: 10px; justify-content: center;">
-                            <button onclick="coachBot.redoOnboarding()" style="background: #6366F1; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">
+                            <button onclick="window.coachBot.redoOnboarding()" style="background: #6366F1; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">
                                 🔄 Refaire l'onboarding
                             </button>
-                            <button onclick="coachBot.closeSettings()" style="background: #64748B; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">
+                            <button onclick="window.coachBot.closeSettings()" style="background: #64748B; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">
                                 Fermer
                             </button>
                         </div>
@@ -508,9 +561,15 @@ class CoachBot {
         document.querySelectorAll('.day-btn').forEach(btn => {
             btn.classList.remove('active');
         });
-        document.querySelector(`[data-day="${day}"]`).classList.add('active');
+        const activeBtn = document.querySelector(`[data-day="${day}"]`);
+        if (activeBtn) {
+            activeBtn.classList.add('active');
+        }
         
-        document.querySelector('.day-title').textContent = `Jour ${day} - Transformation`;
+        const dayTitle = document.querySelector('.day-title');
+        if (dayTitle) {
+            dayTitle.textContent = `Jour ${day} - Transformation`;
+        }
         this.loadMessages();
     }
 
@@ -593,24 +652,34 @@ class CoachBot {
     }
 
     showAuthModal() {
-        this.authModal.style.display = 'flex';
+        if (this.authModal) {
+            this.authModal.style.display = 'flex';
+        }
     }
 
     hideAuthModal() {
-        this.authModal.style.display = 'none';
+        if (this.authModal) {
+            this.authModal.style.display = 'none';
+        }
     }
 
     showLoginForm() {
-        this.loginForm.style.display = 'block';
-        this.registerForm.style.display = 'none';
+        if (this.loginForm && this.registerForm) {
+            this.loginForm.style.display = 'block';
+            this.registerForm.style.display = 'none';
+        }
     }
 
     showRegisterForm() {
-        this.loginForm.style.display = 'none';
-        this.registerForm.style.display = 'block';
+        if (this.loginForm && this.registerForm) {
+            this.loginForm.style.display = 'none';
+            this.registerForm.style.display = 'block';
+        }
     }
 
     async showWelcomeMessage() {
+        if (!this.chatMessages) return;
+
         const onboardingData = localStorage.getItem('coachbot_onboarding');
         let welcomeMessage = "As-salāmu ʿalaykum ! 🤲🏻 Je suis CoachBot, ton coach personnel pour ces 15 jours de transformation. Comment puis-je t'aider aujourd'hui ?";
         
@@ -623,6 +692,8 @@ class CoachBot {
     }
 
     async loadMessages() {
+        if (!this.chatMessages) return;
+
         try {
             if (this.serverMode) {
                 const response = await fetch(`/api/chat/history?day=${this.currentDay}`, {
@@ -652,6 +723,8 @@ class CoachBot {
     }
 
     displayMessages(messages) {
+        if (!this.chatMessages) return;
+
         this.chatMessages.innerHTML = '';
         messages.forEach(msg => {
             this.addMessage(msg.message, msg.role, false);
@@ -660,6 +733,8 @@ class CoachBot {
     }
 
     addMessage(content, role, save = true) {
+        if (!this.chatMessages) return;
+
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${role}-message`;
         
@@ -711,6 +786,8 @@ class CoachBot {
     }
 
     async sendMessage() {
+        if (!this.messageInput) return;
+
         const message = this.messageInput.value.trim();
         if (!message) return;
 
@@ -763,8 +840,10 @@ class CoachBot {
             <div class="message-time">${timestamp}</div>
         `;
 
-        this.chatMessages.appendChild(messageDiv);
-        this.currentStreamingMessage = messageDiv.querySelector('.message-content');
+        if (this.chatMessages) {
+            this.chatMessages.appendChild(messageDiv);
+            this.currentStreamingMessage = messageDiv.querySelector('.message-content');
+        }
         
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -790,8 +869,10 @@ class CoachBot {
                         const parsed = JSON.parse(data);
                         if (parsed.content) {
                             fullResponse += parsed.content;
-                            this.currentStreamingMessage.textContent = fullResponse;
-                            this.scrollToBottom();
+                            if (this.currentStreamingMessage) {
+                                this.currentStreamingMessage.textContent = fullResponse;
+                                this.scrollToBottom();
+                            }
                         }
                     } catch (e) {
                         // Ignorer les erreurs de parsing
@@ -885,32 +966,37 @@ class CoachBot {
             <div class="message-time">${timestamp}</div>
         `;
 
-        this.chatMessages.appendChild(messageDiv);
-        const contentDiv = messageDiv.querySelector('.message-content');
-        
-        // Animation de frappe
-        let i = 0;
-        const typeWriter = () => {
-            if (i < selectedResponse.length) {
-                contentDiv.textContent += selectedResponse.charAt(i);
-                i++;
-                this.scrollToBottom();
-                setTimeout(typeWriter, 30);
-            } else {
-                this.saveMessage(selectedResponse, 'ai');
-            }
-        };
-        
-        setTimeout(typeWriter, 500);
+        if (this.chatMessages) {
+            this.chatMessages.appendChild(messageDiv);
+            const contentDiv = messageDiv.querySelector('.message-content');
+            
+            // Animation de frappe
+            let i = 0;
+            const typeWriter = () => {
+                if (i < selectedResponse.length) {
+                    contentDiv.textContent += selectedResponse.charAt(i);
+                    i++;
+                    this.scrollToBottom();
+                    setTimeout(typeWriter, 30);
+                } else {
+                    this.saveMessage(selectedResponse, 'ai');
+                }
+            };
+            
+            setTimeout(typeWriter, 500);
+        }
     }
 
     getLastAiMessage() {
+        if (!this.chatMessages) return null;
         const aiMessages = this.chatMessages.querySelectorAll('.ai-message .message-content');
         return aiMessages.length > 0 ? aiMessages[aiMessages.length - 1].textContent : null;
     }
 
     scrollToBottom() {
-        this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+        if (this.chatMessages) {
+            this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+        }
     }
 }
 
@@ -934,14 +1020,19 @@ function showSettings() {
     }
 }
 
-// Initialisation
+// Initialisation sécurisée
 document.addEventListener('DOMContentLoaded', () => {
-    window.coachBot = new CoachBot();
-    
-    // Charger les voix après un délai
-    setTimeout(() => {
-        if (window.speechSynthesis) {
-            window.speechSynthesis.getVoices();
-        }
-    }, 1000);
+    try {
+        window.coachBot = new CoachBot();
+        console.log('✅ CoachBot initialisé avec succès');
+        
+        // Charger les voix après un délai
+        setTimeout(() => {
+            if (window.speechSynthesis) {
+                window.speechSynthesis.getVoices();
+            }
+        }, 1000);
+    } catch (error) {
+        console.error('❌ Erreur initialisation CoachBot:', error);
+    }
 });
