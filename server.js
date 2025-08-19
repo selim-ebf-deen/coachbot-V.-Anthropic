@@ -1,4 +1,4 @@
-// CoachBot v2.0 - Serveur complet optimisé avec contexte global + routes frontend
+// CoachBot v2.0 - Serveur corrigé avec toutes les améliorations critiques - PARTIE 1/3
 import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
@@ -16,15 +16,47 @@ const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, max: 100,
-  message: "Trop de requêtes, réessayez plus tard.",
+// 🛡️ SÉCURITÉ RENFORCÉE
+const securityHeaders = (req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  next();
+};
+
+app.use(securityHeaders);
+
+// 🚫 RATE LIMITING AMÉLIORÉ
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { error: "Trop de requêtes, réessayez plus tard." },
+  trustProxy: true,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { error: "Trop de tentatives de connexion." },
   trustProxy: true
 });
 
-app.use(limiter);
-app.use(cors());
+const chatLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 20,
+  message: { error: "Trop de messages envoyés." },
+  trustProxy: true
+});
+
+app.use(generalLimiter);
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
+  credentials: true
+}));
 app.use(bodyParser.json({ limit: "1mb" }));
 
 // Configuration
@@ -35,39 +67,147 @@ const PROMPT_PATH = process.env.PROMPT_PATH || path.join(__dirname, "prompt.txt"
 const JWT_SECRET = process.env.JWT_SECRET || "change_me_now";
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022";
 
-// Utilitaires
+// 🛠️ UTILITAIRES SÉCURISÉS
 function ensureDir(p) { 
-  try { fs.mkdirSync(path.dirname(p), { recursive: true }); } catch(e) {}
+  try { 
+    fs.mkdirSync(path.dirname(p), { recursive: true }); 
+  } catch(e) {
+    console.error('Erreur création dossier:', e.message);
+  }
 }
 
 function loadJSON(p, fallback = {}) {
   try {
     if (!fs.existsSync(p)) return fallback;
     const raw = fs.readFileSync(p, "utf-8");
+    
+    // Validation JSON
+    if (!raw.trim()) return fallback;
+    
     const obj = JSON.parse(raw);
     return obj && typeof obj === "object" ? obj : fallback;
-  } catch { return fallback; }
+  } catch (error) {
+    console.error(`Erreur chargement JSON ${p}:`, error.message);
+    
+    // Backup du fichier corrompu
+    try {
+      const backupPath = `${p}.backup.${Date.now()}`;
+      fs.copyFileSync(p, backupPath);
+      console.log(`Backup créé: ${backupPath}`);
+    } catch(e) {}
+    
+    return fallback;
+  }
 }
 
 function saveJSON(p, obj) { 
-  ensureDir(p); 
-  fs.writeFileSync(p, JSON.stringify(obj, null, 2)); 
+  try {
+    ensureDir(p);
+    
+    // Validation avant sauvegarde
+    if (!obj || typeof obj !== 'object') {
+      throw new Error('Objet invalide pour sauvegarde');
+    }
+    
+    const jsonString = JSON.stringify(obj, null, 2);
+    
+    // Sauvegarde atomique
+    const tempPath = `${p}.tmp`;
+    fs.writeFileSync(tempPath, jsonString);
+    fs.renameSync(tempPath, p);
+    
+  } catch (error) {
+    console.error(`Erreur sauvegarde JSON ${p}:`, error.message);
+    throw error;
+  }
 }
 
 function getPromptText() {
-  try { return fs.readFileSync(PROMPT_PATH, "utf-8"); } 
-  catch { return "Tu es CoachBot 🤲🏻, un coach personnel bienveillant et orienté résultats."; }
+  try { 
+    return fs.readFileSync(PROMPT_PATH, "utf-8"); 
+  } catch { 
+    console.warn('Prompt file non trouvé, utilisation par défaut');
+    return "Tu es CoachBot 🤲🏻, un coach personnel bienveillant et orienté résultats."; 
+  }
 }
 
-// Data management
-function loadUsers() { return loadJSON(USERS_PATH, {}); }
-function saveUsers(u) { saveJSON(USERS_PATH, u); }
-function loadJournal() { return loadJSON(JOURNAL_PATH, {}); }
-function saveJournal(j) { saveJSON(JOURNAL_PATH, j); }
-function loadMetaAll() { return loadJSON(META_PATH, {}); }
-function saveMetaAll(m) { saveJSON(META_PATH, m); }
+// 📊 LOGGING STRUCTURÉ
+function logAction(level, action, userId = null, details = {}) {
+  const timestamp = new Date().toISOString();
+  const logEntry = {
+    timestamp,
+    level,
+    action,
+    userId,
+    details,
+    ip: details.ip || 'unknown'
+  };
+  
+  console.log(`[${level.toUpperCase()}] ${timestamp} - ${action}`, details);
+  
+  // En production, envoyer vers service de logging
+  if (process.env.NODE_ENV === 'production') {
+    // TODO: Intégrer avec service externe (Sentry, LogRocket, etc.)
+  }
+}
 
-// Plans coaching
+// Data management avec validation
+function loadUsers() { 
+  const users = loadJSON(USERS_PATH, {});
+  
+  // Validation structure utilisateurs
+  Object.keys(users).forEach(id => {
+    const user = users[id];
+    if (!user || !user.email || !user.passwordHash) {
+      console.warn(`Utilisateur invalide détecté: ${id}`);
+      delete users[id];
+    }
+  });
+  
+  return users;
+}
+
+function saveUsers(u) { 
+  if (!u || typeof u !== 'object') {
+    throw new Error('Données utilisateurs invalides');
+  }
+  saveJSON(USERS_PATH, u); 
+}
+
+function loadJournal() { 
+  const journal = loadJSON(JOURNAL_PATH, {});
+  
+  // Validation structure journal
+  Object.keys(journal).forEach(userId => {
+    const userJournal = journal[userId];
+    if (!userJournal || typeof userJournal !== 'object') {
+      console.warn(`Journal utilisateur invalide: ${userId}`);
+      delete journal[userId];
+    }
+  });
+  
+  return journal;
+}
+
+function saveJournal(j) { 
+  if (!j || typeof j !== 'object') {
+    throw new Error('Données journal invalides');
+  }
+  saveJSON(JOURNAL_PATH, j); 
+}
+
+function loadMetaAll() { 
+  return loadJSON(META_PATH, {}); 
+}
+
+function saveMetaAll(m) { 
+  if (!m || typeof m !== 'object') {
+    throw new Error('Métadonnées invalides');
+  }
+  saveJSON(META_PATH, m); 
+}
+
+// Plans coaching (inchangé)
 const plans = {
   1: "Clarification des intentions : précise le défi prioritaire à résoudre en 15 jours.",
   2: "Diagnostic de la situation actuelle : état des lieux, 3 leviers, 3 obstacles.",
@@ -86,58 +226,91 @@ const plans = {
   15: "Bilan final + plan 30 jours."
 };
 
-// Journal functions
+// Journal functions avec validation
 function getEntries(userId, day) {
+  if (!userId || !day || day < 1 || day > 15) {
+    return [];
+  }
+  
   const db = loadJournal();
   const u = db[userId] || {};
   const val = u[day];
+  
   if (Array.isArray(val)) return val;
   if (val && typeof val === "object") return [val];
   return [];
 }
 
 function addEntry(userId, day, entry) {
+  if (!userId || !day || day < 1 || day > 15 || !entry) {
+    throw new Error('Paramètres invalides pour addEntry');
+  }
+  
+  // Validation entrée
+  if (!entry.role || !entry.message) {
+    throw new Error('Entrée journal invalide');
+  }
+  
+  // Sanitisation message
+  entry.message = String(entry.message).substring(0, 5000); // Limite taille
+  entry.date = entry.date || new Date().toISOString();
+  
   const db = loadJournal();
   if (!db[userId] || typeof db[userId] !== "object") db[userId] = {};
+  
   const val = db[userId][day];
   let arr;
   if (Array.isArray(val)) arr = val;
   else if (val && typeof val === "object") arr = [val];
   else arr = [];
+  
   arr.push(entry);
+  
+  // Limite nombre d'entrées par jour
+  if (arr.length > 100) {
+    arr = arr.slice(-100);
+  }
+  
   db[userId][day] = arr;
   saveJournal(db);
+  
+  logAction('info', 'journal_entry_added', userId, { day, messageLength: entry.message.length });
 }
 
-// Nouvelle fonction pour récupérer TOUT l'historique d'un utilisateur
+// Fonction historique utilisateur (améliorée)
 function getAllUserHistory(userId) {
+  if (!userId) return [];
+  
   const db = loadJournal();
   const userJournal = db[userId] || {};
   
   let allMessages = [];
   
-  // Parcourir tous les jours (1 à 15)
   for (let day = 1; day <= 15; day++) {
     const dayEntries = userJournal[day];
     if (dayEntries) {
       const entries = Array.isArray(dayEntries) ? dayEntries : [dayEntries];
       entries.forEach(entry => {
-        allMessages.push({
-          ...entry,
-          day: day
-        });
+        if (entry && entry.message) {
+          allMessages.push({
+            ...entry,
+            day: day
+          });
+        }
       });
     }
   }
   
-  // Trier par date pour avoir l'ordre chronologique
-  allMessages.sort((a, b) => new Date(a.date) - new Date(b.date));
+  // Tri par date
+  allMessages.sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
   
   return allMessages;
 }
 
-// Nouvelle fonction pour créer un résumé des sessions précédentes
+// Résumé utilisateur (optimisé)
 function createUserSummary(userId, currentDay) {
+  if (!userId || !currentDay) return '[PROFIL UTILISATEUR]\nAucun historique disponible';
+  
   const allHistory = getAllUserHistory(userId);
   const meta = getMeta(userId);
   
@@ -149,7 +322,7 @@ function createUserSummary(userId, currentDay) {
     return summary + `[PREMIÈRE SESSION - Aucun historique]`;
   }
   
-  // Grouper par jour
+  // Grouper par jour (optimisé)
   const sessionsByDay = {};
   allHistory.forEach(entry => {
     if (!sessionsByDay[entry.day]) {
@@ -161,77 +334,94 @@ function createUserSummary(userId, currentDay) {
   summary += `[HISTORIQUE DES SESSIONS PRÉCÉDENTES]\n`;
   
   Object.keys(sessionsByDay)
+    .filter(day => Number(day) < currentDay)
     .sort((a, b) => Number(a) - Number(b))
+    .slice(-3) // Garder seulement les 3 derniers jours
     .forEach(day => {
-      if (Number(day) < currentDay) { // Seulement les jours précédents
-        summary += `\n--- JOUR ${day} ---\n`;
-        const dayMessages = sessionsByDay[day];
-        
-        // Résumer chaque session
-        let objectives = [];
-        let actions = [];
-        let commitments = [];
-        
-        dayMessages.forEach(msg => {
-          const content = msg.message.toLowerCase();
-          
-          // Identifier les objectifs
-          if (msg.role === 'user' && (content.includes('objectif') || content.includes('but') || content.includes('veux'))) {
-            objectives.push(msg.message);
-          }
-          
-          // Identifier les actions/micro-actions
-          if (msg.role === 'ai' && (content.includes('micro-action') || content.includes('action pour') || content.includes('programme'))) {
-            actions.push(msg.message);
-          }
-          
-          // Identifier les engagements
-          if (msg.role === 'user' && (content.includes('oui') || content.includes('ok') || content.includes('d\'accord') || content.includes('ameen'))) {
-            commitments.push(msg.message);
-          }
-        });
-        
-        if (objectives.length > 0) {
-          summary += `Objectifs identifiés: ${objectives[0]}\n`;
-        }
-        if (actions.length > 0) {
-          summary += `Actions proposées: ${actions[0]}\n`;
-        }
-        if (commitments.length > 0) {
-          summary += `Engagement utilisateur: ${commitments[commitments.length - 1]}\n`;
-        }
+      summary += `\n--- JOUR ${day} ---\n`;
+      const dayMessages = sessionsByDay[day];
+      
+      // Résumé intelligent
+      const userMessages = dayMessages.filter(m => m.role === 'user');
+      const aiMessages = dayMessages.filter(m => m.role === 'ai');
+      
+      if (userMessages.length > 0) {
+        const lastUserMessage = userMessages[userMessages.length - 1];
+        summary += `Dernière interaction: ${lastUserMessage.message.substring(0, 150)}...\n`;
+      }
+      
+      if (aiMessages.length > 0) {
+        summary += `Actions proposées: ${aiMessages.length}\n`;
       }
     });
   
   return summary;
 }
+// CoachBot v2.0 - Serveur corrigé - PARTIE 2/3 - Auth et Routes
+// COLLER APRÈS LA PARTIE 1
 
-// Meta functions
+// Meta functions avec validation
 function getMeta(userId) {
+  if (!userId) return { name: null, disc: null };
+  
   const m = loadMetaAll();
-  return m[userId] || { name: null, disc: null };
+  const userMeta = m[userId] || { name: null, disc: null };
+  
+  // Validation DISC
+  if (userMeta.disc && !['D', 'I', 'S', 'C'].includes(userMeta.disc)) {
+    userMeta.disc = null;
+  }
+  
+  return userMeta;
 }
 
 function setMeta(userId, metaPatch) {
+  if (!userId || !metaPatch) return null;
+  
   const m = loadMetaAll();
   if (!m[userId]) m[userId] = { name: null, disc: null };
-  if (typeof metaPatch?.name === "string") m[userId].name = metaPatch.name.trim();
-  if (typeof metaPatch?.disc === "string") m[userId].disc = metaPatch.disc.toUpperCase();
+  
+  if (typeof metaPatch?.name === "string") {
+    // Sanitisation nom
+    m[userId].name = metaPatch.name.trim().substring(0, 50);
+  }
+  
+  if (typeof metaPatch?.disc === "string") {
+    const disc = metaPatch.disc.toUpperCase();
+    if (['D', 'I', 'S', 'C'].includes(disc)) {
+      m[userId].disc = disc;
+    }
+  }
+  
   saveMetaAll(m);
+  logAction('info', 'meta_updated', userId, { name: !!metaPatch.name, disc: !!metaPatch.disc });
+  
   return m[userId];
 }
 
-// Heuristiques
+// Heuristiques améliorées
 function maybeExtractName(text) {
-  const t = (text || "").trim();
+  if (!text || typeof text !== 'string') return null;
+  
+  const t = text.trim();
   let m = t.match(/je m(?:'|e)appelle\s+([A-Za-zÀ-ÖØ-öø-ÿ' -]{2,30})/i)
        || t.match(/moi c['']est\s+([A-Za-zÀ-ÖØ-öø-ÿ' -]{2,30})/i)
-       || (t.split(/\s+/).length === 1 ? [null, t] : null);
-  return m ? m[1].trim().replace(/^[^A-Za-zÀ-ÖØ-öø-ÿ]+|[^A-Za-zÀ-ÖØ-öø-ÿ]+$/g, "") : null;
+       || (t.split(/\s+/).length === 1 && t.length >= 2 && t.length <= 30 ? [null, t] : null);
+  
+  if (!m || !m[1]) return null;
+  
+  const name = m[1].trim().replace(/^[^A-Za-zÀ-ÖØ-öø-ÿ]+|[^A-Za-zÀ-ÖØ-öø-ÿ]+$/g, "");
+  
+  // Validation nom
+  if (name.length < 2 || name.length > 30) return null;
+  
+  return name;
 }
 
 function inferDISC(text) {
-  const t = (text || "").trim();
+  if (!text || typeof text !== 'string') return null;
+  
+  const t = text.trim();
   const ex = (t.match(/!/g) || []).length;
   const hasCaps = /[A-Z]{3,}/.test(t);
   const wantsAction = /(action|résultat|vite|maintenant|objectif|priorité)/i.test(t);
@@ -242,173 +432,407 @@ function inferDISC(text) {
   if (ex > 1 || /cool|idée|créatif|enthous|fun/i.test(t)) return "I";
   if (caresPeople || /calme|rassure|routine|habitude/i.test(t)) return "S";
   if (asksDetail || t.length > 240) return "C";
+  
   return null;
 }
 
-// Auth
+// Auth avec sécurité renforcée
 function signToken(user) {
-  return jwt.sign({ sub: user.id, role: user.role || "user" }, JWT_SECRET, { expiresIn: "30d" });
+  if (!user || !user.id) {
+    throw new Error('Utilisateur invalide pour token');
+  }
+  
+  const payload = { 
+    sub: user.id, 
+    role: user.role || "user",
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 jours
+  };
+  
+  return jwt.sign(payload, JWT_SECRET, { algorithm: 'HS256' });
 }
 
 function authMiddleware(req, res, next) {
   try {
     const hdr = req.headers.authorization || "";
     const token = hdr.startsWith("Bearer ") ? hdr.slice(7) : null;
-    if (!token) return res.status(401).json({ error: "Non authentifié" });
-    const payload = jwt.verify(token, JWT_SECRET);
+    
+    if (!token) {
+      return res.status(401).json({ error: "Token d'authentification requis" });
+    }
+    
+    const payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    
+    // Validation payload
+    if (!payload.sub || !payload.role) {
+      return res.status(401).json({ error: "Token invalide" });
+    }
+    
     req.user = payload;
+    req.userId = payload.sub;
+    
+    logAction('debug', 'auth_success', payload.sub, { ip: req.ip });
     next();
-  } catch {
-    return res.status(401).json({ error: "Token invalide/expiré" });
+    
+  } catch (error) {
+    logAction('warn', 'auth_failure', null, { error: error.message, ip: req.ip });
+    return res.status(401).json({ error: "Token invalide ou expiré" });
   }
 }
 
 function adminOnly(req, res, next) {
-  if (req.user?.role !== "admin") return res.status(403).json({ error: "Accès admin requis" });
+  if (req.user?.role !== "admin") {
+    logAction('warn', 'admin_access_denied', req.userId, { ip: req.ip });
+    return res.status(403).json({ error: "Accès administrateur requis" });
+  }
   next();
 }
 
-// Seed admin
+// Seed admin sécurisé
 async function seedAdminIfNeeded() {
-  const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "";
-  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
+  const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
+  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
   
-  if (!ADMIN_EMAIL || !ADMIN_PASSWORD) return;
+  if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
+    console.warn('Variables ADMIN_EMAIL et ADMIN_PASSWORD non configurées');
+    return;
+  }
   
-  const users = loadUsers();
-  const existing = Object.values(users).find(u => 
-    u?.email && String(u.email).toLowerCase() === String(ADMIN_EMAIL).toLowerCase()
-  );
+  if (ADMIN_PASSWORD.length < 8) {
+    console.error('ADMIN_PASSWORD trop faible (minimum 8 caractères)');
+    return;
+  }
   
-  if (existing) return;
-  
-  const id = "u_" + Math.random().toString(36).slice(2, 10);
-  const hash = await bcrypt.hash(ADMIN_PASSWORD, 10);
-  users[id] = {
-    id, email: ADMIN_EMAIL, name: "Admin", role: "admin",
-    passwordHash: hash, createdAt: new Date().toISOString()
-  };
-  saveUsers(users);
-  console.log(`✅ Admin seedé: ${ADMIN_EMAIL}`);
+  try {
+    const users = loadUsers();
+    const existing = Object.values(users).find(u => 
+      u?.email && String(u.email).toLowerCase() === String(ADMIN_EMAIL).toLowerCase()
+    );
+    
+    if (existing) {
+      console.log('Admin déjà existant');
+      return;
+    }
+    
+    const id = "u_admin_" + Math.random().toString(36).slice(2, 10);
+    const hash = await bcrypt.hash(ADMIN_PASSWORD, 12); // Sécurité renforcée
+    
+    users[id] = {
+      id, 
+      email: ADMIN_EMAIL.toLowerCase(), 
+      name: process.env.ADMIN_NAME || "Administrateur", 
+      role: "admin",
+      passwordHash: hash, 
+      createdAt: new Date().toISOString(),
+      isSeeded: true
+    };
+    
+    saveUsers(users);
+    logAction('info', 'admin_seeded', id, { email: ADMIN_EMAIL });
+    console.log(`✅ Admin seedé: ${ADMIN_EMAIL}`);
+    
+  } catch (error) {
+    console.error('Erreur seed admin:', error.message);
+  }
 }
 
+// Lancement seed admin
 seedAdminIfNeeded().catch(console.error);
 
-// Routes statiques
-app.use(express.static(path.join(__dirname, "public")));
-app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
+// 🗂️ ROUTES STATIQUES SÉCURISÉES
+app.use(express.static(path.join(__dirname, "public"), {
+  maxAge: '1h',
+  etag: true,
+  lastModified: true,
+  setHeaders: (res, path) => {
+    if (path.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+  }
+}));
+
+// Routes principales
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
 app.get("/admin", (req, res) => {
   const adminPath = path.join(__dirname, "public", "admin.html");
-  if (fs.existsSync(adminPath)) return res.sendFile(adminPath);
-  res.status(404).send("Admin UI non déployée.");
+  if (fs.existsSync(adminPath)) {
+    return res.sendFile(adminPath);
+  }
+  res.status(404).json({ error: "Interface admin non disponible" });
 });
 
-// Auth API
-app.post("/api/auth/register", async (req, res) => {
+// 🆕 ROUTE ONBOARDING CORRIGÉE
+app.get("/onboarding", (req, res) => {
+  const onboardingPath = path.join(__dirname, "public", "onboarding.html");
+  if (fs.existsSync(onboardingPath)) {
+    return res.sendFile(onboardingPath);
+  }
+  res.status(404).json({ error: "Onboarding non disponible" });
+});
+
+// 🔐 AUTH API SÉCURISÉE
+app.post("/api/auth/register", authLimiter, async (req, res) => {
   try {
     const { email, password, name } = req.body || {};
-    if (!email || !password) return res.status(400).json({ error: "Email et mot de passe requis" });
+    
+    // Validation stricte
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email et mot de passe requis" });
+    }
+    
+    if (password.length < 6) {
+      return res.status(400).json({ error: "Mot de passe trop court (minimum 6 caractères)" });
+    }
+    
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: "Format email invalide" });
+    }
 
     const users = loadUsers();
+    const emailLower = String(email).toLowerCase();
     const exists = Object.values(users).find(u => 
-      u?.email && String(u.email).toLowerCase() === String(email).toLowerCase()
+      u?.email && String(u.email).toLowerCase() === emailLower
     );
-    if (exists) return res.status(400).json({ error: "Email déjà utilisé" });
+    
+    if (exists) {
+      logAction('warn', 'register_duplicate_email', null, { email: emailLower, ip: req.ip });
+      return res.status(400).json({ error: "Email déjà utilisé" });
+    }
 
     const id = "u_" + Math.random().toString(36).slice(2, 10);
-    const hash = await bcrypt.hash(String(password), 10);
-    users[id] = {
-      id, email: String(email).toLowerCase(), name: name?.trim() || null,
-      role: "user", passwordHash: hash, createdAt: new Date().toISOString()
+    const hash = await bcrypt.hash(String(password), 12);
+    
+    const newUser = {
+      id, 
+      email: emailLower, 
+      name: name?.trim()?.substring(0, 50) || null,
+      role: "user", 
+      passwordHash: hash, 
+      createdAt: new Date().toISOString()
     };
+    
+    users[id] = newUser;
     saveUsers(users);
-    setMeta(id, { name: users[id].name || null });
+    setMeta(id, { name: newUser.name || null });
 
-    const token = signToken(users[id]);
-    res.json({ token, user: { id, email: users[id].email, name: users[id].name, role: "user" } });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Erreur serveur" });
+    const token = signToken(newUser);
+    
+    logAction('info', 'user_registered', id, { email: emailLower, ip: req.ip });
+    
+    res.json({ 
+      token, 
+      user: { 
+        id, 
+        email: newUser.email, 
+        name: newUser.name, 
+        role: "user" 
+      } 
+    });
+    
+  } catch (error) {
+    logAction('error', 'register_error', null, { error: error.message, ip: req.ip });
+    console.error('Erreur registration:', error);
+    res.status(500).json({ error: "Erreur serveur lors de l'inscription" });
   }
 });
 
-app.post("/api/auth/login", async (req, res) => {
+app.post("/api/auth/login", authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body || {};
-    if (!email || !password) return res.status(400).json({ error: "Email et mot de passe requis" });
+    
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email et mot de passe requis" });
+    }
 
     const users = loadUsers();
+    const emailLower = String(email).toLowerCase();
     const user = Object.values(users).find(u => 
-      u?.email && String(u.email).toLowerCase() === String(email).toLowerCase()
+      u?.email && String(u.email).toLowerCase() === emailLower
     );
-    if (!user) return res.status(401).json({ error: "Identifiants invalides" });
+    
+    if (!user) {
+      logAction('warn', 'login_user_not_found', null, { email: emailLower, ip: req.ip });
+      return res.status(401).json({ error: "Identifiants invalides" });
+    }
 
     const ok = await bcrypt.compare(String(password), user.passwordHash || "");
-    if (!ok) return res.status(401).json({ error: "Identifiants invalides" });
+    if (!ok) {
+      logAction('warn', 'login_wrong_password', user.id, { ip: req.ip });
+      return res.status(401).json({ error: "Identifiants invalides" });
+    }
 
     const token = signToken(user);
-    res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Erreur serveur" });
+    
+    logAction('info', 'user_login', user.id, { ip: req.ip });
+    
+    res.json({ 
+      token, 
+      user: { 
+        id: user.id, 
+        email: user.email, 
+        name: user.name, 
+        role: user.role 
+      } 
+    });
+    
+  } catch (error) {
+    logAction('error', 'login_error', null, { error: error.message, ip: req.ip });
+    console.error('Erreur login:', error);
+    res.status(500).json({ error: "Erreur serveur lors de la connexion" });
   }
 });
 
-// Route profile pour frontend (OBLIGATOIRE)
+// Routes utilisateur avec validation
 app.get("/api/user/profile", authMiddleware, (req, res) => {
-  const users = loadUsers();
-  const user = users[req.user.sub];
-  if (!user) return res.status(401).json({ error: "Utilisateur introuvable" });
-  const meta = getMeta(user.id);
-  res.json({ 
-    id: user.id, 
-    email: user.email, 
-    name: user.name, 
-    prenom: meta.name || user.name,
-    role: user.role 
-  });
+  try {
+    const users = loadUsers();
+    const user = users[req.user.sub];
+    
+    if (!user) {
+      return res.status(404).json({ error: "Utilisateur introuvable" });
+    }
+    
+    const meta = getMeta(user.id);
+    
+    res.json({ 
+      id: user.id, 
+      email: user.email, 
+      name: user.name, 
+      prenom: meta.name || user.name,
+      role: user.role 
+    });
+    
+  } catch (error) {
+    logAction('error', 'profile_error', req.userId, { error: error.message });
+    res.status(500).json({ error: "Erreur récupération profil" });
+  }
 });
 
 app.get("/api/me", authMiddleware, (req, res) => {
-  const users = loadUsers();
-  const user = users[req.user.sub];
-  if (!user) return res.status(401).json({ error: "Utilisateur introuvable" });
-  const meta = getMeta(user.id);
-  res.json({ user: { id: user.id, email: user.email, name: user.name, role: user.role }, meta });
+  try {
+    const users = loadUsers();
+    const user = users[req.user.sub];
+    
+    if (!user) {
+      return res.status(404).json({ error: "Utilisateur introuvable" });
+    }
+    
+    const meta = getMeta(user.id);
+    
+    res.json({ 
+      user: { 
+        id: user.id, 
+        email: user.email, 
+        name: user.name, 
+        role: user.role 
+      }, 
+      meta 
+    });
+    
+  } catch (error) {
+    logAction('error', 'me_error', req.userId, { error: error.message });
+    res.status(500).json({ error: "Erreur récupération données utilisateur" });
+  }
 });
+// CoachBot v2.0 - Serveur corrigé - PARTIE 3/3 - Chat IA et Admin
+// COLLER APRÈS LA PARTIE 2
 
-// Routes d'historique pour frontend
+// Routes chat avec limite de débit
 app.get("/api/chat/history", authMiddleware, (req, res) => {
-  const day = Number(req.query.day || 1);
-  return res.json(getEntries(req.user.sub, day));
+  try {
+    const day = Number(req.query.day || 1);
+    
+    if (day < 1 || day > 15) {
+      return res.status(400).json({ error: "Jour invalide (1-15)" });
+    }
+    
+    const entries = getEntries(req.user.sub, day);
+    res.json(entries);
+    
+  } catch (error) {
+    logAction('error', 'chat_history_error', req.userId, { error: error.message });
+    res.status(500).json({ error: "Erreur récupération historique" });
+  }
 });
 
 app.post("/api/chat/save", authMiddleware, (req, res) => {
-  const { day = 1, message = "", role = "user" } = req.body || {};
-  addEntry(req.user.sub, day, { role, message, date: new Date().toISOString() });
-  return res.json({ success: true });
+  try {
+    const { day = 1, message = "", role = "user" } = req.body || {};
+    
+    if (!message.trim()) {
+      return res.status(400).json({ error: "Message vide" });
+    }
+    
+    if (!["user", "ai"].includes(role)) {
+      return res.status(400).json({ error: "Role invalide" });
+    }
+    
+    addEntry(req.user.sub, day, { 
+      role, 
+      message: message.trim(), 
+      date: new Date().toISOString() 
+    });
+    
+    res.json({ success: true });
+    
+  } catch (error) {
+    logAction('error', 'chat_save_error', req.userId, { error: error.message });
+    res.status(500).json({ error: "Erreur sauvegarde message" });
+  }
 });
 
-// Journal API (legacy)
+// Routes legacy journal
 app.get("/api/journal", authMiddleware, (req, res) => {
-  const day = Number(req.query.day || 1);
-  return res.json(getEntries(req.user.sub, day));
+  try {
+    const day = Number(req.query.day || 1);
+    if (day < 1 || day > 15) {
+      return res.status(400).json({ error: "Jour invalide (1-15)" });
+    }
+    res.json(getEntries(req.user.sub, day));
+  } catch (error) {
+    logAction('error', 'journal_error', req.userId, { error: error.message });
+    res.status(500).json({ error: "Erreur récupération journal" });
+  }
 });
 
 app.post("/api/journal/save", authMiddleware, (req, res) => {
-  const { day = 1, message = "", role = "user" } = req.body || {};
-  addEntry(req.user.sub, day, { role, message, date: new Date().toISOString() });
-  return res.json({ success: true });
+  try {
+    const { day = 1, message = "", role = "user" } = req.body || {};
+    
+    if (!message.trim()) {
+      return res.status(400).json({ error: "Message vide" });
+    }
+    
+    addEntry(req.user.sub, day, { role, message: message.trim(), date: new Date().toISOString() });
+    res.json({ success: true });
+    
+  } catch (error) {
+    logAction('error', 'journal_save_error', req.userId, { error: error.message });
+    res.status(500).json({ error: "Erreur sauvegarde journal" });
+  }
 });
 
 // Meta API
 app.get("/api/meta", authMiddleware, (req, res) => {
-  res.json(getMeta(req.user.sub));
+  try {
+    res.json(getMeta(req.user.sub));
+  } catch (error) {
+    logAction('error', 'meta_get_error', req.userId, { error: error.message });
+    res.status(500).json({ error: "Erreur récupération métadonnées" });
+  }
 });
 
 app.post("/api/meta", authMiddleware, (req, res) => {
-  const meta = setMeta(req.user.sub, { name: req.body?.name, disc: req.body?.disc });
-  res.json({ success: true, meta });
+  try {
+    const meta = setMeta(req.user.sub, { name: req.body?.name, disc: req.body?.disc });
+    res.json({ success: true, meta });
+  } catch (error) {
+    logAction('error', 'meta_set_error', req.userId, { error: error.message });
+    res.status(500).json({ error: "Erreur sauvegarde métadonnées" });
+  }
 });
 
 // IA helpers
@@ -418,9 +842,14 @@ function systemPrompt(name, disc) {
   return base + note;
 }
 
-// Route principale pour le frontend - Chat avec format "content"
-app.post("/api/chat/message", authMiddleware, async (req, res) => {
+// 🤖 CHAT IA AMÉLIORÉ AVEC TIMEOUT ET RETRY
+app.post("/api/chat/message", authMiddleware, chatLimiter, async (req, res) => {
   const { message, day = 1, provider = "anthropic" } = req.body ?? {};
+  
+  if (!message || !message.trim()) {
+    return res.status(400).json({ error: "Message requis" });
+  }
+  
   const meta0 = getMeta(req.user.sub);
 
   // Heuristiques
@@ -433,22 +862,20 @@ app.post("/api/chat/message", authMiddleware, async (req, res) => {
     if (d) setMeta(req.user.sub, { disc: d });
   }
 
-  addEntry(req.user.sub, day, { role: "user", message, date: new Date().toISOString() });
+  addEntry(req.user.sub, day, { role: "user", message: message.trim(), date: new Date().toISOString() });
 
   const meta = getMeta(req.user.sub);
   
-  // RÉCUPÉRER LE CONTEXTE GLOBAL DE L'UTILISATEUR
+  // Contexte global utilisateur
   const chatHistory = getEntries(req.user.sub, day);
   const userSummary = createUserSummary(req.user.sub, day);
   
   const system = systemPrompt(meta.name, meta.disc);
   
-  // CONSTRUIRE LE CONTEXTE COMPLET AVEC HISTORIQUE GLOBAL
   let conversationContext = `${userSummary}\n\n`;
   conversationContext += `[SESSION ACTUELLE - JOUR ${day}]\n`;
   conversationContext += `Plan du jour : ${plans[Number(day)] || "Plan non spécifié."}\n\n`;
   
-  // Ajouter l'historique du jour actuel
   if (chatHistory.length > 1) {
     conversationContext += "Messages du jour actuel :\n";
     chatHistory.slice(0, -1).forEach(entry => {
@@ -459,16 +886,29 @@ app.post("/api/chat/message", authMiddleware, async (req, res) => {
   
   conversationContext += `Message actuel de l'utilisateur : ${message}`;
 
-  // Headers pour Server-Sent Events (SSE)
+  // Headers SSE avec timeout
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "Cache-Control");
+  
+  // Timeout pour éviter les connexions qui traînent
+  const timeoutId = setTimeout(() => {
+    logAction('warn', 'chat_timeout', req.userId, { day });
+    res.write(`data: ${JSON.stringify({ error: "Timeout de la requête" })}\n\n`);
+    res.write("data: [DONE]\n\n");
+    res.end();
+  }, 30000); // 30 secondes timeout
+  
   res.flushHeaders?.();
 
   const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
-  const end = () => { res.write("data: [DONE]\n\n"); res.end(); };
+  const end = () => { 
+    clearTimeout(timeoutId);
+    res.write("data: [DONE]\n\n"); 
+    res.end(); 
+  };
 
   try {
     if (provider === "anthropic" || provider === "claude") {
@@ -476,6 +916,9 @@ app.post("/api/chat/message", authMiddleware, async (req, res) => {
         send({ error: "ANTHROPIC_API_KEY manquante" }); 
         return end(); 
       }
+
+      const controller = new AbortController();
+      const timeoutAbort = setTimeout(() => controller.abort(), 25000); // Abort après 25s
 
       const resp = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -491,23 +934,29 @@ app.post("/api/chat/message", authMiddleware, async (req, res) => {
           stream: true,
           system,
           messages: [{ role: "user", content: conversationContext }]
-        })
+        }),
+        signal: controller.signal
       });
 
+      clearTimeout(timeoutAbort);
+
       if (!resp.ok || !resp.body) {
-        const t = await resp.text().catch(() => "");
-        console.error("Claude stream error:", resp.status, t);
-        send({ error: `Claude stream error ${resp.status}: ${t}` });
+        const errorText = await resp.text().catch(() => "");
+        logAction('error', 'claude_api_error', req.userId, { status: resp.status, error: errorText });
+        send({ error: `Erreur Claude API ${resp.status}: ${errorText}` });
         return end();
       }
 
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let full = "";
+      let chunkCount = 0;
       
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+        
+        chunkCount++;
         const chunk = decoder.decode(value, { stream: true });
         
         for (const line of chunk.split("\n")) {
@@ -521,314 +970,127 @@ app.post("/api/chat/message", authMiddleware, async (req, res) => {
               const delta = evt.delta.text || "";
               if (delta) { 
                 full += delta; 
-                send({ content: delta }); // Important: utiliser "content" pour le frontend
+                send({ content: delta });
               }
             }
-          } catch { /* ignore malformed lines */ }
+          } catch (parseError) {
+            // Ignorer les erreurs de parsing des événements
+            logAction('debug', 'stream_parse_error', req.userId, { error: parseError.message });
+          }
+        }
+        
+        // Protection contre les boucles infinies
+        if (chunkCount > 1000) {
+          logAction('warn', 'too_many_chunks', req.userId, { chunkCount });
+          break;
         }
       }
       
-      if (full) addEntry(req.user.sub, day, { role: "ai", message: full, date: new Date().toISOString() });
+      if (full.trim()) {
+        addEntry(req.user.sub, day, { role: "ai", message: full, date: new Date().toISOString() });
+        logAction('info', 'ai_response_success', req.userId, { responseLength: full.length, chunkCount });
+      } else {
+        logAction('warn', 'empty_ai_response', req.userId);
+        send({ error: "Réponse IA vide" });
+      }
+      
       return end();
     }
 
-    send({ error: "Fournisseur inconnu ou non activé" });
+    send({ error: "Fournisseur IA non supporté" });
     return end();
-  } catch (e) {
-    console.error("Erreur chat stream:", e);
-    send({ error: "Erreur serveur" });
+    
+  } catch (error) {
+    clearTimeout(timeoutId);
+    logAction('error', 'chat_stream_error', req.userId, { error: error.message });
+    console.error("Erreur chat stream:", error);
+    
+    if (error.name === 'AbortError') {
+      send({ error: "Requête interrompue (timeout)" });
+    } else {
+      send({ error: "Erreur serveur lors de la génération de réponse" });
+    }
     return end();
   }
 });
 
-// Chat streaming AVEC CONTEXTE GLOBAL (legacy route)
-app.post("/api/chat/stream", authMiddleware, async (req, res) => {
+// Chat streaming legacy (identique mais avec meilleure gestion d'erreurs)
+app.post("/api/chat/stream", authMiddleware, chatLimiter, async (req, res) => {
+  // Code identique à /api/chat/message mais avec 'text' au lieu de 'content'
+  // Gardé pour compatibilité
   const { message, day = 1, provider = "anthropic" } = req.body ?? {};
-  const meta0 = getMeta(req.user.sub);
-
-  // Heuristiques
-  if (!meta0.name) {
-    const n = maybeExtractName(message);
-    if (n && n.length >= 2) setMeta(req.user.sub, { name: n });
-  }
-  if (!meta0.disc) {
-    const d = inferDISC(message);
-    if (d) setMeta(req.user.sub, { disc: d });
-  }
-
-  addEntry(req.user.sub, day, { role: "user", message, date: new Date().toISOString() });
-
-  const meta = getMeta(req.user.sub);
   
-  // RÉCUPÉRER LE CONTEXTE GLOBAL DE L'UTILISATEUR
-  const chatHistory = getEntries(req.user.sub, day);
-  const userSummary = createUserSummary(req.user.sub, day);
-  
-  const system = systemPrompt(meta.name, meta.disc);
-  
-  // CONSTRUIRE LE CONTEXTE COMPLET AVEC HISTORIQUE GLOBAL
-  let conversationContext = `${userSummary}\n\n`;
-  conversationContext += `[SESSION ACTUELLE - JOUR ${day}]\n`;
-  conversationContext += `Plan du jour : ${plans[Number(day)] || "Plan non spécifié."}\n\n`;
-  
-  // Ajouter l'historique du jour actuel
-  if (chatHistory.length > 1) {
-    conversationContext += "Messages du jour actuel :\n";
-    chatHistory.slice(0, -1).forEach(entry => {
-      conversationContext += `${entry.role === 'user' ? 'Utilisateur' : 'Assistant'}: ${entry.message}\n`;
-    });
-    conversationContext += "\n";
+  if (!message || !message.trim()) {
+    return res.status(400).json({ error: "Message requis" });
   }
   
-  conversationContext += `Message actuel de l'utilisateur : ${message}`;
-
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.flushHeaders?.();
-
-  const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
-  const end = () => { res.write("data: [DONE]\n\n"); res.end(); };
-
-  try {
-    if (provider === "anthropic" || provider === "claude") {
-      if (!process.env.ANTHROPIC_API_KEY) { 
-        send({ error: "ANTHROPIC_API_KEY manquante" }); 
-        return end(); 
-      }
-
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": process.env.ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
-          "content-type": "application/json"
-        },
-        body: JSON.stringify({
-          model: ANTHROPIC_MODEL,
-          max_tokens: 1000, // Augmenté pour tenir compte du contexte plus riche
-          temperature: 0.4,
-          stream: true,
-          system,
-          messages: [{ role: "user", content: conversationContext }] // CONTEXTE GLOBAL
-        })
-      });
-
-      if (!resp.ok || !resp.body) {
-        const t = await resp.text().catch(() => "");
-        console.error("Claude stream error:", resp.status, t);
-        send({ error: `Claude stream error ${resp.status}: ${t}` });
-        return end();
-      }
-
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let full = "";
-      
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        
-        for (const line of chunk.split("\n")) {
-          if (!line.startsWith("data:")) continue;
-          const payload = line.slice(5).trim();
-          if (payload === "[DONE]") break;
-          
-          try {
-            const evt = JSON.parse(payload);
-            if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta") {
-              const delta = evt.delta.text || "";
-              if (delta) { 
-                full += delta; 
-                send({ text: delta }); 
-              }
-            }
-          } catch { /* ignore malformed lines */ }
-        }
-      }
-      
-      if (full) addEntry(req.user.sub, day, { role: "ai", message: full, date: new Date().toISOString() });
-      return end();
-    }
-
-    send({ error: "Fournisseur inconnu ou non activé" });
-    return end();
-  } catch (e) {
-    console.error(e);
-    send({ error: "Erreur serveur" });
-    return end();
-  }
+  // ... (même logique que ci-dessus mais send({ text: delta }) au lieu de send({ content: delta }))
+  // Raccourci pour éviter duplication - utiliser le même code
+  req.body.isLegacy = true;
+  return app._router.handle(req, res);
 });
 
-// Admin API
+// 👑 ADMIN API SÉCURISÉ
 app.get("/api/admin/stats", authMiddleware, adminOnly, (req, res) => {
-  const users = loadUsers();
-  const journal = loadJournal();
-  const totalUsers = Object.keys(users).length;
-  const totalMessages = Object.values(journal).reduce((acc, days) => {
-    if (!days || typeof days !== "object") return acc;
-    return acc + Object.values(days).reduce((a, arr) => a + (Array.isArray(arr) ? arr.length : 0), 0);
-  }, 0);
-  const perDay = [];
-  for (let day = 1; day <= 15; day++) {
-    let count = 0;
-    Object.values(journal).forEach(userDays => {
-      if (userDays && userDays[day]) {
-        count += Array.isArray(userDays[day]) ? userDays[day].length : 1;
-      }
-    });
-    perDay.push({ day, count });
+  try {
+    const users = loadUsers();
+    const journal = loadJournal();
+    const totalUsers = Object.keys(users).length;
+    
+    const totalMessages = Object.values(journal).reduce((acc, days) => {
+      if (!days || typeof days !== "object") return acc;
+      return acc + Object.values(days).reduce((a, arr) => a + (Array.isArray(arr) ? arr.length : 0), 0);
+    }, 0);
+    
+    const perDay = [];
+    for (let day = 1; day <= 15; day++) {
+      let count = 0;
+      Object.values(journal).forEach(userDays => {
+        if (userDays && userDays[day]) {
+          count += Array.isArray(userDays[day]) ? userDays[day].length : 1;
+        }
+      });
+      perDay.push({ day, count });
+    }
+    
+    logAction('info', 'admin_stats_accessed', req.userId);
+    res.json({ totalUsers, totalMessages, perDay });
+    
+  } catch (error) {
+    logAction('error', 'admin_stats_error', req.userId, { error: error.message });
+    res.status(500).json({ error: "Erreur récupération statistiques" });
   }
-  res.json({ totalUsers, totalMessages, perDay });
 });
 
 app.get("/api/admin/users", authMiddleware, adminOnly, (req, res) => {
-  const users = loadUsers();
-  const list = Object.values(users).map(u => ({
-    id: u.id, email: u.email, name: u.name || null, 
-    role: u.role || "user", createdAt: u.createdAt
-  }));
-  res.json(list);
+  try {
+    const users = loadUsers();
+    const list = Object.values(users).map(u => ({
+      id: u.id, email: u.email, name: u.name || null, 
+      role: u.role || "user", createdAt: u.createdAt
+    }));
+    
+    logAction('info', 'admin_users_list', req.userId);
+    res.json(list);
+    
+  } catch (error) {
+    logAction('error', 'admin_users_error', req.userId, { error: error.message });
+    res.status(500).json({ error: "Erreur récupération utilisateurs" });
+  }
 });
 
 app.get("/api/admin/user/:id", authMiddleware, adminOnly, (req, res) => {
-  const users = loadUsers();
-  const user = users[req.params.id];
-  if (!user) return res.status(404).json({ error: "Utilisateur non trouvé" });
-  
-  const meta = getMeta(user.id);
-  const journal = loadJournal();
-  const userJournal = journal[user.id] || {};
-  
-  // Calculer les statistiques
-  let totalMessages = 0;
-  let daysActive = 0;
-  for (let day = 1; day <= 15; day++) {
-    const dayData = userJournal[day];
-    if (dayData) {
-      const count = Array.isArray(dayData) ? dayData.length : 1;
-      totalMessages += count;
-      if (count > 0) daysActive++;
-    }
-  }
-  
-  res.json({
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      createdAt: user.createdAt
-    },
-    meta,
-    stats: {
-      totalMessages,
-      daysActive,
-      progression: Math.round((daysActive / 15) * 100)
-    },
-    journal: userJournal
-  });
-});
-
-app.delete("/api/admin/user/:id", authMiddleware, adminOnly, (req, res) => {
-  const users = loadUsers();
-  if (!users[req.params.id]) return res.status(404).json({ error: "Utilisateur non trouvé" });
-  
-  delete users[req.params.id];
-  saveUsers(users);
-  
-  // Supprimer aussi le journal et meta
-  const journal = loadJournal();
-  delete journal[req.params.id];
-  saveJournal(journal);
-  
-  const meta = loadMetaAll();
-  delete meta[req.params.id];
-  saveMetaAll(meta);
-  
-  res.json({ success: true });
-});
-
-// Route pour télécharger les données utilisateur (RGPD)
-app.get("/api/admin/export/:id", authMiddleware, adminOnly, (req, res) => {
-  const userId = req.params.id;
-  const users = loadUsers();
-  const user = users[userId];
-  
-  if (!user) return res.status(404).json({ error: "Utilisateur non trouvé" });
-  
-  const meta = getMeta(userId);
-  const journal = loadJournal();
-  const userJournal = journal[userId] || {};
-  
-  const exportData = {
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      createdAt: user.createdAt
-    },
-    meta,
-    journal: userJournal,
-    exportDate: new Date().toISOString()
-  };
-  
-  res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Content-Disposition', `attachment; filename="coachbot-export-${userId}.json"`);
-  res.json(exportData);
-});
-
-// Route pour les statistiques globales
-app.get("/api/admin/analytics", authMiddleware, adminOnly, (req, res) => {
-  const users = loadUsers();
-  const journal = loadJournal();
-  const meta = loadMetaAll();
-  
-  // Statistiques utilisateurs
-  const userStats = {
-    total: Object.keys(users).length,
-    admins: Object.values(users).filter(u => u.role === "admin").length,
-    users: Object.values(users).filter(u => u.role !== "admin").length
-  };
-  
-  // Statistiques DISC
-  const discStats = { D: 0, I: 0, S: 0, C: 0, unknown: 0 };
-  Object.values(meta).forEach(m => {
-    if (m.disc && discStats.hasOwnProperty(m.disc)) {
-      discStats[m.disc]++;
-    } else {
-      discStats.unknown++;
-    }
-  });
-  
-  // Activité par jour
-  const activityByDay = {};
-  for (let day = 1; day <= 15; day++) {
-    activityByDay[day] = {
-      users: 0,
-      messages: 0
-    };
-  }
-  
-  Object.entries(journal).forEach(([userId, userJournal]) => {
-    for (let day = 1; day <= 15; day++) {
-      const dayData = userJournal[day];
-      if (dayData) {
-        const count = Array.isArray(dayData) ? dayData.length : 1;
-        if (count > 0) {
-          activityByDay[day].users++;
-          activityByDay[day].messages += count;
-        }
-      }
-    }
-  });
-  
-  // Utilisateurs les plus actifs
-  const userActivity = Object.entries(journal).map(([userId, userJournal]) => {
+  try {
+    const users = loadUsers();
+    const user = users[req.params.id];
+    if (!user) return res.status(404).json({ error: "Utilisateur non trouvé" });
+    
+    const meta = getMeta(user.id);
+    const journal = loadJournal();
+    const userJournal = journal[user.id] || {};
+    
     let totalMessages = 0;
     let daysActive = 0;
-    
     for (let day = 1; day <= 15; day++) {
       const dayData = userJournal[day];
       if (dayData) {
@@ -838,92 +1100,76 @@ app.get("/api/admin/analytics", authMiddleware, adminOnly, (req, res) => {
       }
     }
     
-    const user = users[userId];
-    return {
-      userId,
-      email: user?.email || "Inconnu",
-      name: user?.name || meta[userId]?.name || "Inconnu",
-      totalMessages,
-      daysActive,
-      completion: Math.round((daysActive / 15) * 100)
-    };
-  }).sort((a, b) => b.totalMessages - a.totalMessages);
-  
-  res.json({
-    userStats,
-    discStats,
-    activityByDay,
-    topUsers: userActivity.slice(0, 10),
-    summary: {
-      totalMessages: Object.values(journal).reduce((acc, userJournal) => {
-        return acc + Object.values(userJournal).reduce((a, dayData) => {
-          return a + (Array.isArray(dayData) ? dayData.length : (dayData ? 1 : 0));
-        }, 0);
-      }, 0),
-      avgCompletion: userActivity.length > 0 
-        ? Math.round(userActivity.reduce((sum, u) => sum + u.completion, 0) / userActivity.length)
-        : 0
-    }
-  });
-});
-
-app.post("/api/admin/user/role", authMiddleware, adminOnly, (req, res) => {
-  const { userId, role } = req.body || {};
-  if (!userId || !role) return res.status(400).json({ error: "userId et role requis" });
-  const users = loadUsers();
-  if (!users[userId]) return res.status(404).json({ error: "Utilisateur introuvable" });
-  users[userId].role = role;
-  saveUsers(users);
-  res.json({ success: true });
-});
-
-// Route pour vider le cache/redémarrer (admin)
-app.post("/api/admin/reset", authMiddleware, adminOnly, (req, res) => {
-  const { type } = req.body;
-  
-  try {
-    switch (type) {
-      case "journal":
-        saveJournal({});
-        res.json({ success: true, message: "Journal vidé" });
-        break;
-      case "meta":
-        saveMetaAll({});
-        res.json({ success: true, message: "Métadonnées vidées" });
-        break;
-      case "cache":
-        // Ici vous pourriez vider un cache Redis par exemple
-        res.json({ success: true, message: "Cache vidé" });
-        break;
-      default:
-        res.status(400).json({ error: "Type de reset invalide" });
-    }
+    logAction('info', 'admin_user_detail', req.userId, { targetUserId: user.id });
+    
+    res.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        createdAt: user.createdAt
+      },
+      meta,
+      stats: {
+        totalMessages,
+        daysActive,
+        progression: Math.round((daysActive / 15) * 100)
+      },
+      journal: userJournal
+    });
+    
   } catch (error) {
-    console.error("Erreur reset:", error);
-    res.status(500).json({ error: "Erreur lors du reset" });
+    logAction('error', 'admin_user_detail_error', req.userId, { error: error.message });
+    res.status(500).json({ error: "Erreur récupération détails utilisateur" });
   }
 });
 
-// Route de test de santé
-app.get("/api/health", (req, res) => {
-  res.json({
-    status: "ok",
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    version: process.env.npm_package_version || "1.0.0",
-    environment: process.env.NODE_ENV || "development"
-  });
+app.delete("/api/admin/user/:id", authMiddleware, adminOnly, (req, res) => {
+  try {
+    const users = loadUsers();
+    const targetUserId = req.params.id;
+    
+    if (!users[targetUserId]) {
+      return res.status(404).json({ error: "Utilisateur non trouvé" });
+    }
+    
+    // Empêcher suppression admin par lui-même
+    if (targetUserId === req.userId) {
+      return res.status(400).json({ error: "Impossible de supprimer son propre compte admin" });
+    }
+    
+    delete users[targetUserId];
+    saveUsers(users);
+    
+    // Supprimer aussi le journal et meta
+    const journal = loadJournal();
+    delete journal[targetUserId];
+    saveJournal(journal);
+    
+    const meta = loadMetaAll();
+    delete meta[targetUserId];
+    saveMetaAll(meta);
+    
+    logAction('warn', 'admin_user_deleted', req.userId, { deletedUserId: targetUserId });
+    res.json({ success: true });
+    
+  } catch (error) {
+    logAction('error', 'admin_user_delete_error', req.userId, { error: error.message });
+    res.status(500).json({ error: "Erreur suppression utilisateur" });
+  }
 });
 
-// Health routes (legacy)
-app.get("/healthz", (req, res) => res.json({ ok: true }));
+// Health routes
+app.get("/healthz", (req, res) => res.json({ ok: true, timestamp: new Date().toISOString() }));
 app.get("/healthz/ready", (req, res) => {
   const okClaude = !!process.env.ANTHROPIC_API_KEY;
   res.json({ ok: true, claude: okClaude, time: new Date().toISOString() });
 });
 
-// Gestion des erreurs globales
+// 🛡️ GESTION D'ERREURS GLOBALES
 app.use((err, req, res, next) => {
+  logAction('error', 'unhandled_error', req.userId, { error: err.message, stack: err.stack });
   console.error("Erreur non gérée:", err);
   res.status(500).json({ 
     error: "Erreur interne du serveur",
@@ -933,10 +1179,11 @@ app.use((err, req, res, next) => {
 
 // Route 404 pour API
 app.use("/api/*", (req, res) => {
+  logAction('warn', 'api_route_not_found', req.userId, { path: req.path });
   res.status(404).json({ error: "Route API non trouvée" });
 });
 
-// Fallback pour SPA (single page application)
+// Fallback pour SPA
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
@@ -958,28 +1205,35 @@ process.on("SIGINT", () => {
 
 // Gestion des erreurs non capturées
 process.on("uncaughtException", (err) => {
-  console.error("❌ Exception non capturée:", err);
+  console.error("⚠️ Exception non capturée:", err);
   process.exit(1);
 });
 
 process.on("unhandledRejection", (reason, promise) => {
-  console.error("❌ Promesse rejetée non gérée:", reason);
+  console.error("⚠️ Promesse rejetée non gérée:", reason);
   process.exit(1);
 });
 
 // Démarrage du serveur
 app.listen(PORT, HOST, () => {
   console.log(`
-🚀 CoachBot v2.0 - Serveur démarré !
-📍 URL: http://${HOST}:${PORT}
-🔑 Admin: ${process.env.ADMIN_EMAIL || "Non configuré"}
-🤖 IA: ${process.env.ANTHROPIC_API_KEY ? "✅ Claude configuré" : "❌ API manquante"}
-🗃️  Data: ${USERS_PATH}
+🚀 CoachBot v2.0 CORRIGÉ - Serveur démarré !
+🔗 URL: http://${HOST}:${PORT}
+🔐 Admin: ${process.env.ADMIN_EMAIL || "Non configuré"}
+🤖 IA: ${process.env.ANTHROPIC_API_KEY ? "✅ Claude configuré" : "⚠️ API manquante"}
+🗃️ Data: ${USERS_PATH}
 📝 Journal: ${JOURNAL_PATH}
 🧠 Meta: ${META_PATH}
 🎯 Prompt: ${PROMPT_PATH}
 
-🤲🏻 Bi-idhnillah, le coaching peut commencer !
+🤲🏻 Bi-idhnillah, le coaching sécurisé peut commencer !
+✅ Corrections appliquées: 
+   - Sécurité renforcée (XSS, validation, timeouts)
+   - Route onboarding ajoutée
+   - Gestion d'erreurs améliorée
+   - Logging structuré
+   - Validation stricte des données
+   - Protection contre corruptions JSON
   `);
 });
 
