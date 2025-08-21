@@ -1649,6 +1649,302 @@ class CoachBot {
             
             this.saveMessage(response, 'ai');
             this.currentStreamingMessage = null;
-             }
+          } catch (error) {
+            logError('simulate_ai_response_error', error);
+            this.showErrorMessage('Erreur de génération de réponse');
+        }
+    }
+
+    generateContextualResponses(onboardingData, userMessage) {
+        let responses = [];
+
+        if (onboardingData) {
+            const profile = JSON.parse(onboardingData);
+            const style = profile.coachingStyle || 'bienveillant';
+            const prenom = profile.prenom || 'mon frère/ma sœur';
+            
+            // Réponses selon le style de coaching
+            if (style === 'motivant') {
+                responses = [
+                    `Excellent ${prenom} ! 💪 Je vois ta détermination pour améliorer ta ${profile.objectif}. Quelle micro-action vas-tu faire aujourd'hui pour progresser ?`,
+                    `Mashallah ${prenom} ! 🌟 Ton engagement est inspirant. Dis-moi, sur une échelle de 1 à 10, comment évalues-tu ton niveau actuel aujourd'hui ?`,
+                    `Bravo ${prenom} ! 🚀 Chaque pas compte dans ton parcours vers une meilleure ${profile.objectif}. Quel défi veux-tu relever maintenant ?`
+                ];
+            } else if (style === 'structured') {
+                responses = [
+                    `Bonjour ${prenom}. 📋 Analysons ensemble ta progression sur l'objectif "${profile.objectif}". Peux-tu me donner 3 éléments concrets de ta situation actuelle ?`,
+                    `${prenom}, établissons un plan clair. 📊 Concernant ta ${profile.objectif}, quels sont tes 3 leviers principaux et tes 3 obstacles actuels ?`,
+                    `Parfait ${prenom}. 🎯 Définissons des critères de réussite mesurables pour ta ${profile.objectif}. Que signifierait "réussir" pour toi ?`
+                ];
+            } else {
+                responses = [
+                    `Barakallahu fik ${prenom} 🤲🏻 Je t'accompagne avec bienveillance dans ton cheminement vers une meilleure ${profile.objectif}. Comment te sens-tu aujourd'hui ?`,
+                    `As-salāmu ʿalaykum ${prenom} 🤲🏻 Prends ton temps, chaque étape compte. Concernant ta ${profile.objectif}, quelle petite victoire peux-tu célébrer aujourd'hui ?`,
+                    `Qu'Allah facilite ton parcours ${prenom} ✨ Je suis là pour t'encourager dans l'amélioration de ta ${profile.objectif}. Raconte-moi comment ça se passe pour toi.`
+                ];
+            }
+        } else {
+            // Réponses par défaut si pas d'onboarding
+            responses = [
+                "As-salāmu ʿalaykum ! 🤲🏻 Pour mieux t'accompagner, peux-tu me dire ton prénom et me partager le défi principal sur lequel tu souhaites progresser ?",
+                "Barakallahu fik ! Je suis là pour t'aider dans ton développement personnel. Dis-moi, quel est ton objectif prioritaire en ce moment ?",
+                "Qu'Allah te facilite ! ✨ Chaque parcours de transformation commence par une intention claire. Quelle est la tienne ?"
+            ];
+        }
+
+        // Réponses selon mots-clés
+        if (userMessage.includes('niveau') || userMessage.includes('évalue')) {
+            responses.push("Sur une échelle de 1 à 10, comment évalues-tu ton niveau actuel ? Et dis-moi ce qui te ferait passer au niveau supérieur.");
+        }
+        
+        if (userMessage.includes('difficile') || userMessage.includes('obstacle')) {
+            responses.push("Je comprends que ce soit difficile. 🤲🏻 Identifions ensemble le plus petit pas possible que tu peux faire aujourd'hui. Quelle micro-action de 10 minutes maximum ?");
+        }
+        
+        if (userMessage.includes('oui') || userMessage.includes('d\'accord') || userMessage.includes('ameen')) {
+            responses.push("Excellent ! 🌟 Maintenant, fixons-nous un critère de réussite concret. Comment saurais-tu que tu as progressé d'ici ce soir ?");
+        }
+
+        return responses;
+    }
+
+    selectUniqueResponse(responses) {
+        try {
+            // Éviter les répétitions
+            const usedKey = `used_responses_day${this.currentDay}`;
+            const usedResponses = JSON.parse(localStorage.getItem(usedKey) || '[]');
+            const availableResponses = responses.filter(r => !usedResponses.includes(r));
+            
+            let selectedResponse;
+            if (availableResponses.length > 0) {
+                selectedResponse = availableResponses[Math.floor(Math.random() * availableResponses.length)];
+                usedResponses.push(selectedResponse);
+                localStorage.setItem(usedKey, JSON.stringify(usedResponses.slice(-5))); // Garder 5 dernières
+            } else {
+                // Reset si toutes utilisées
+                selectedResponse = responses[0];
+                localStorage.setItem(usedKey, JSON.stringify([selectedResponse]));
+            }
+
+            return selectedResponse;
+        } catch (error) {
+            logError('select_unique_response_error', error);
+            return responses[0] || "As-salāmu ʿalaykum ! Comment puis-je t'aider ?";
+        }
+    }
+
+    async typeWriterEffect(text) {
+        return new Promise((resolve) => {
+            if (!this.currentStreamingMessage) {
+                resolve();
+                return;
+            }
+
+            let i = 0;
+            const typeWriter = () => {
+                if (i < text.length && this.currentStreamingMessage) {
+                    this.currentStreamingMessage.textContent = text.substring(0, i + 1);
+                    i++;
+                    this.scrollToBottom();
+                    setTimeout(typeWriter, 30);
+                } else {
+                    resolve();
+                }
+            };
+            
+            setTimeout(typeWriter, 500);
+        });
+    }
+
+    getLastAiMessage() {
+        if (!this.chatMessages) return null;
+        
+        try {
+            const aiMessages = this.chatMessages.querySelectorAll('.ai-message .message-content');
+            return aiMessages.length > 0 ? aiMessages[aiMessages.length - 1].textContent : null;
+        } catch (error) {
+            logError('get_last_ai_message_error', error);
+            return null;
+        }
+    }
+
+    scrollToBottom() {
+        if (this.chatMessages) {
+            try {
+                this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+            } catch (error) {
+                logError('scroll_to_bottom_error', error);
+            }
+        }
+    }
+
+    // Méthode pour détection mobile
+    isMobile() {
+        return window.innerWidth <= 768 || /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     }
 }
+
+// 🌐 FONCTIONS GLOBALES POUR LES BOUTONS VOCAUX
+function toggleVoice() {
+    try {
+        if (window.coachBot && window.coachBot.voiceManager) {
+            window.coachBot.voiceManager.toggleRecording();
+        } else {
+            console.warn('VoiceManager non disponible');
+            showTemporaryMessage('Fonctions vocales non disponibles', 'error');
+        }
+    } catch (error) {
+        logError('toggle_voice_error', error);
+    }
+}
+
+function stopSpeaking() {
+    try {
+        if (window.coachBot && window.coachBot.voiceManager) {
+            window.coachBot.voiceManager.toggleSpeaker();
+        } else {
+            console.warn('VoiceManager non disponible');
+        }
+    } catch (error) {
+        logError('stop_speaking_error', error);
+    }
+}
+
+// Fonction globale pour les paramètres
+function showSettings() {
+    try {
+        if (window.coachBot) {
+            window.coachBot.showSettings();
+        } else {
+            console.warn('CoachBot non disponible');
+            alert('CoachBot n\'est pas encore initialisé. Veuillez patienter...');
+        }
+    } catch (error) {
+        logError('show_settings_error', error);
+    }
+}
+
+// Fonction helper pour messages temporaires globaux
+function showTemporaryMessage(message, type = 'info') {
+    try {
+        const messageDiv = document.createElement('div');
+        messageDiv.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: ${type === 'error' ? '#dc3545' : '#28a745'};
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            z-index: 10001;
+            font-size: 14px;
+            max-width: 300px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            animation: slideInRight 0.3s ease;
+        `;
+        
+        messageDiv.textContent = message;
+        document.body.appendChild(messageDiv);
+        
+        setTimeout(() => {
+            messageDiv.style.animation = 'slideOutRight 0.3s ease';
+            setTimeout(() => messageDiv.remove(), 300);
+        }, 4000);
+        
+    } catch (error) {
+        console.error('Erreur affichage message:', error);
+    }
+}
+
+// Fonction pour détecter mobile
+function isMobile() {
+    return window.innerWidth <= 768 || /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+
+// 🚀 INITIALISATION SÉCURISÉE
+document.addEventListener('DOMContentLoaded', () => {
+    try {
+        // Ajouter les styles pour les animations si manquants
+        if (!document.getElementById('coachbot-animations')) {
+            const style = document.createElement('style');
+            style.id = 'coachbot-animations';
+            style.textContent = `
+                @keyframes slideInRight {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+                @keyframes slideOutRight {
+                    from { transform: translateX(0); opacity: 1; }
+                    to { transform: translateX(100%); opacity: 0; }
+                }
+                .recording {
+                    animation: pulse 1s infinite;
+                }
+                .playing {
+                    animation: pulse 1s infinite;
+                }
+                @keyframes pulse {
+                    0% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7); }
+                    70% { box-shadow: 0 0 0 10px rgba(255, 0, 0, 0); }
+                    100% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        // Initialiser CoachBot
+        window.coachBot = new CoachBot();
+        
+        console.log(`
+🚀 CoachBot Frontend v2.0 CORRIGÉ - Chargé avec succès !
+✅ Corrections appliquées :
+   - Gestion d'erreurs robuste avec logging
+   - Sécurité renforcée (sanitisation XSS)
+   - VoiceManager amélioré avec fallbacks
+   - Timeouts et retry logic
+   - Validation stricte des entrées
+   - Interface responsive optimisée
+   - Nettoyage automatique des ressources
+   - Mode hors ligne fiable
+
+🤲🏻 Bi-idhnillah, l'interface sécurisée est prête !
+        `);
+
+        // Export pour debug en développement
+        if (window.location.hostname === 'localhost') {
+            window.coachBotDebug = {
+                logError,
+                sanitizeHTML,
+                validateEmail,
+                validatePassword,
+                isMobile
+            };
+        }
+        
+        // Charger les voix après un délai
+        setTimeout(() => {
+            if (window.speechSynthesis) {
+                window.speechSynthesis.getVoices();
+            }
+        }, 1000);
+        
+    } catch (error) {
+        console.error('❌ Erreur initialisation CoachBot:', error);
+        logError('coachbot_dom_init_error', error);
+        
+        // Fallback d'urgence
+        showTemporaryMessage('Erreur d\'initialisation. Rechargement...', 'error');
+        setTimeout(() => location.reload(), 3000);
+    }
+});
+
+// 🧹 NETTOYAGE AVANT FERMETURE
+window.addEventListener('beforeunload', () => {
+    try {
+        if (window.coachBot) {
+            window.coachBot.cleanup();
+        }
+    } catch (error) {
+        console.error('Erreur cleanup:', error);
+    }
+});
