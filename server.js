@@ -1,4 +1,4 @@
-// CoachBot v2.0 - Serveur corrigé avec toutes les améliorations critiques - PARTIE 1/3
+// CoachBot v2.0 - Serveur complet corrigé - PARTIE 1/4
 import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
@@ -81,7 +81,6 @@ function loadJSON(p, fallback = {}) {
     if (!fs.existsSync(p)) return fallback;
     const raw = fs.readFileSync(p, "utf-8");
     
-    // Validation JSON
     if (!raw.trim()) return fallback;
     
     const obj = JSON.parse(raw);
@@ -89,7 +88,6 @@ function loadJSON(p, fallback = {}) {
   } catch (error) {
     console.error(`Erreur chargement JSON ${p}:`, error.message);
     
-    // Backup du fichier corrompu
     try {
       const backupPath = `${p}.backup.${Date.now()}`;
       fs.copyFileSync(p, backupPath);
@@ -104,14 +102,12 @@ function saveJSON(p, obj) {
   try {
     ensureDir(p);
     
-    // Validation avant sauvegarde
     if (!obj || typeof obj !== 'object') {
       throw new Error('Objet invalide pour sauvegarde');
     }
     
     const jsonString = JSON.stringify(obj, null, 2);
     
-    // Sauvegarde atomique
     const tempPath = `${p}.tmp`;
     fs.writeFileSync(tempPath, jsonString);
     fs.renameSync(tempPath, p);
@@ -145,7 +141,6 @@ function logAction(level, action, userId = null, details = {}) {
   
   console.log(`[${level.toUpperCase()}] ${timestamp} - ${action}`, details);
   
-  // En production, envoyer vers service de logging
   if (process.env.NODE_ENV === 'production') {
     // TODO: Intégrer avec service externe (Sentry, LogRocket, etc.)
   }
@@ -155,7 +150,6 @@ function logAction(level, action, userId = null, details = {}) {
 function loadUsers() { 
   const users = loadJSON(USERS_PATH, {});
   
-  // Validation structure utilisateurs
   Object.keys(users).forEach(id => {
     const user = users[id];
     if (!user || !user.email || !user.passwordHash) {
@@ -177,7 +171,6 @@ function saveUsers(u) {
 function loadJournal() { 
   const journal = loadJSON(JOURNAL_PATH, {});
   
-  // Validation structure journal
   Object.keys(journal).forEach(userId => {
     const userJournal = journal[userId];
     if (!userJournal || typeof userJournal !== 'object') {
@@ -207,7 +200,7 @@ function saveMetaAll(m) {
   saveJSON(META_PATH, m); 
 }
 
-// Plans coaching (inchangé)
+// Plans coaching
 const plans = {
   1: "Clarification des intentions : précise le défi prioritaire à résoudre en 15 jours.",
   2: "Diagnostic de la situation actuelle : état des lieux, 3 leviers, 3 obstacles.",
@@ -225,6 +218,8 @@ const plans = {
   14: "Leadership (Maxwell).",
   15: "Bilan final + plan 30 jours."
 };
+
+// CoachBot v2.0 - Serveur complet corrigé - PARTIE 2/4
 
 // Journal functions avec validation
 function getEntries(userId, day) {
@@ -246,13 +241,11 @@ function addEntry(userId, day, entry) {
     throw new Error('Paramètres invalides pour addEntry');
   }
   
-  // Validation entrée
   if (!entry.role || !entry.message) {
     throw new Error('Entrée journal invalide');
   }
   
-  // Sanitisation message
-  entry.message = String(entry.message).substring(0, 5000); // Limite taille
+  entry.message = String(entry.message).substring(0, 5000);
   entry.date = entry.date || new Date().toISOString();
   
   const db = loadJournal();
@@ -266,7 +259,6 @@ function addEntry(userId, day, entry) {
   
   arr.push(entry);
   
-  // Limite nombre d'entrées par jour
   if (arr.length > 100) {
     arr = arr.slice(-100);
   }
@@ -277,7 +269,6 @@ function addEntry(userId, day, entry) {
   logAction('info', 'journal_entry_added', userId, { day, messageLength: entry.message.length });
 }
 
-// Fonction historique utilisateur (améliorée)
 function getAllUserHistory(userId) {
   if (!userId) return [];
   
@@ -301,13 +292,11 @@ function getAllUserHistory(userId) {
     }
   }
   
-  // Tri par date
   allMessages.sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
   
   return allMessages;
 }
 
-// Résumé utilisateur (optimisé)
 function createUserSummary(userId, currentDay) {
   if (!userId || !currentDay) return '[PROFIL UTILISATEUR]\nAucun historique disponible';
   
@@ -322,7 +311,6 @@ function createUserSummary(userId, currentDay) {
     return summary + `[PREMIÈRE SESSION - Aucun historique]`;
   }
   
-  // Grouper par jour (optimisé)
   const sessionsByDay = {};
   allHistory.forEach(entry => {
     if (!sessionsByDay[entry.day]) {
@@ -336,12 +324,11 @@ function createUserSummary(userId, currentDay) {
   Object.keys(sessionsByDay)
     .filter(day => Number(day) < currentDay)
     .sort((a, b) => Number(a) - Number(b))
-    .slice(-3) // Garder seulement les 3 derniers jours
+    .slice(-3)
     .forEach(day => {
       summary += `\n--- JOUR ${day} ---\n`;
       const dayMessages = sessionsByDay[day];
       
-      // Résumé intelligent
       const userMessages = dayMessages.filter(m => m.role === 'user');
       const aiMessages = dayMessages.filter(m => m.role === 'ai');
       
@@ -357,8 +344,6 @@ function createUserSummary(userId, currentDay) {
   
   return summary;
 }
-// CoachBot v2.0 - Serveur corrigé - PARTIE 2/3 - Auth et Routes
-// COLLER APRÈS LA PARTIE 1
 
 // Meta functions avec validation
 function getMeta(userId) {
@@ -367,7 +352,6 @@ function getMeta(userId) {
   const m = loadMetaAll();
   const userMeta = m[userId] || { name: null, disc: null };
   
-  // Validation DISC
   if (userMeta.disc && !['D', 'I', 'S', 'C'].includes(userMeta.disc)) {
     userMeta.disc = null;
   }
@@ -382,7 +366,6 @@ function setMeta(userId, metaPatch) {
   if (!m[userId]) m[userId] = { name: null, disc: null };
   
   if (typeof metaPatch?.name === "string") {
-    // Sanitisation nom
     m[userId].name = metaPatch.name.trim().substring(0, 50);
   }
   
@@ -412,7 +395,6 @@ function maybeExtractName(text) {
   
   const name = m[1].trim().replace(/^[^A-Za-zÀ-ÖØ-öø-ÿ]+|[^A-Za-zÀ-ÖØ-öø-ÿ]+$/g, "");
   
-  // Validation nom
   if (name.length < 2 || name.length > 30) return null;
   
   return name;
@@ -446,7 +428,7 @@ function signToken(user) {
     sub: user.id, 
     role: user.role || "user",
     iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 jours
+    exp: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60)
   };
   
   return jwt.sign(payload, JWT_SECRET, { algorithm: 'HS256' });
@@ -463,7 +445,6 @@ function authMiddleware(req, res, next) {
     
     const payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     
-    // Validation payload
     if (!payload.sub || !payload.role) {
       return res.status(401).json({ error: "Token invalide" });
     }
@@ -515,7 +496,7 @@ async function seedAdminIfNeeded() {
     }
     
     const id = "u_admin_" + Math.random().toString(36).slice(2, 10);
-    const hash = await bcrypt.hash(ADMIN_PASSWORD, 12); // Sécurité renforcée
+    const hash = await bcrypt.hash(ADMIN_PASSWORD, 12);
     
     users[id] = {
       id, 
@@ -536,8 +517,9 @@ async function seedAdminIfNeeded() {
   }
 }
 
-// Lancement seed admin
 seedAdminIfNeeded().catch(console.error);
+
+// CoachBot v2.0 - Serveur complet corrigé - PARTIE 3/4
 
 // 🗂️ ROUTES STATIQUES SÉCURISÉES
 app.use(express.static(path.join(__dirname, "public"), {
@@ -551,7 +533,12 @@ app.use(express.static(path.join(__dirname, "public"), {
   }
 }));
 
-// Routes principales
+// Route HOME
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+// Route ADMIN
 app.get("/admin", (req, res) => {
   const adminPath = path.join(__dirname, "public", "admin.html");
   console.log("🔍 Tentative d'accès admin:", adminPath);
@@ -564,11 +551,9 @@ app.get("/admin", (req, res) => {
   
   console.log("❌ admin.html introuvable");
   res.status(404).send("Admin UI non trouvée");
-});app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// 🆕 ROUTE ONBOARDING CORRIGÉE
+// Route ONBOARDING
 app.get("/onboarding", (req, res) => {
   const onboardingPath = path.join(__dirname, "public", "onboarding.html");
   if (fs.existsSync(onboardingPath)) {
@@ -582,7 +567,6 @@ app.post("/api/auth/register", authLimiter, async (req, res) => {
   try {
     const { email, password, name } = req.body || {};
     
-    // Validation stricte
     if (!email || !password) {
       return res.status(400).json({ error: "Email et mot de passe requis" });
     }
@@ -741,8 +725,6 @@ app.get("/api/me", authMiddleware, (req, res) => {
     res.status(500).json({ error: "Erreur récupération données utilisateur" });
   }
 });
-// CoachBot v2.0 - Serveur corrigé - PARTIE 3/3 - Chat IA et Admin
-// COLLER APRÈS LA PARTIE 2
 
 // Routes chat avec limite de débit
 app.get("/api/chat/history", authMiddleware, (req, res) => {
@@ -818,6 +800,8 @@ app.post("/api/journal/save", authMiddleware, (req, res) => {
     res.status(500).json({ error: "Erreur sauvegarde journal" });
   }
 });
+
+// CoachBot v2.0 - Serveur complet corrigé - PARTIE 4/4
 
 // Meta API
 app.get("/api/meta", authMiddleware, (req, res) => {
@@ -978,12 +962,10 @@ app.post("/api/chat/message", authMiddleware, chatLimiter, async (req, res) => {
               }
             }
           } catch (parseError) {
-            // Ignorer les erreurs de parsing des événements
             logAction('debug', 'stream_parse_error', req.userId, { error: parseError.message });
           }
         }
         
-        // Protection contre les boucles infinies
         if (chunkCount > 1000) {
           logAction('warn', 'too_many_chunks', req.userId, { chunkCount });
           break;
@@ -1018,19 +1000,21 @@ app.post("/api/chat/message", authMiddleware, chatLimiter, async (req, res) => {
   }
 });
 
-// Chat streaming legacy (identique mais avec meilleure gestion d'erreurs)
+// Chat streaming legacy (pour compatibilité)
 app.post("/api/chat/stream", authMiddleware, chatLimiter, async (req, res) => {
-  // Code identique à /api/chat/message mais avec 'text' au lieu de 'content'
-  // Gardé pour compatibilité
-  const { message, day = 1, provider = "anthropic" } = req.body ?? {};
-  
-  if (!message || !message.trim()) {
-    return res.status(400).json({ error: "Message requis" });
-  }
-  
-  // ... (même logique que ci-dessus mais send({ text: delta }) au lieu de send({ content: delta }))
-  // Raccourci pour éviter duplication - utiliser le même code
+  // Même logique que /api/chat/message mais avec 'text' au lieu de 'content'
+  // Redirection vers la nouvelle route
   req.body.isLegacy = true;
+  // Réutiliser la même logique mais adapter le format de sortie
+  const originalSend = res.write;
+  res.write = function(chunk) {
+    if (chunk.includes('"content":')) {
+      chunk = chunk.replace('"content":', '"text":');
+    }
+    return originalSend.call(this, chunk);
+  };
+  
+  // Appeler la même logique
   return app._router.handle(req, res);
 });
 
@@ -1138,7 +1122,6 @@ app.delete("/api/admin/user/:id", authMiddleware, adminOnly, (req, res) => {
       return res.status(404).json({ error: "Utilisateur non trouvé" });
     }
     
-    // Empêcher suppression admin par lui-même
     if (targetUserId === req.userId) {
       return res.status(400).json({ error: "Impossible de supprimer son propre compte admin" });
     }
@@ -1146,7 +1129,6 @@ app.delete("/api/admin/user/:id", authMiddleware, adminOnly, (req, res) => {
     delete users[targetUserId];
     saveUsers(users);
     
-    // Supprimer aussi le journal et meta
     const journal = loadJournal();
     delete journal[targetUserId];
     saveJournal(journal);
@@ -1161,6 +1143,98 @@ app.delete("/api/admin/user/:id", authMiddleware, adminOnly, (req, res) => {
   } catch (error) {
     logAction('error', 'admin_user_delete_error', req.userId, { error: error.message });
     res.status(500).json({ error: "Erreur suppression utilisateur" });
+  }
+});
+
+app.get("/api/admin/export/:id", authMiddleware, adminOnly, (req, res) => {
+  try {
+    const userId = req.params.id;
+    const users = loadUsers();
+    const user = users[userId];
+    
+    if (!user) return res.status(404).json({ error: "Utilisateur non trouvé" });
+    
+    const meta = getMeta(userId);
+    const journal = loadJournal();
+    const userJournal = journal[userId] || {};
+    
+    const exportData = {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        createdAt: user.createdAt
+      },
+      meta,
+      journal: userJournal,
+      exportDate: new Date().toISOString()
+    };
+    
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="coachbot-export-${userId}.json"`);
+    res.json(exportData);
+    
+  } catch (error) {
+    logAction('error', 'admin_export_error', req.userId, { error: error.message });
+    res.status(500).json({ error: "Erreur export utilisateur" });
+  }
+});
+
+app.get("/api/admin/analytics", authMiddleware, adminOnly, (req, res) => {
+  try {
+    const users = loadUsers();
+    const journal = loadJournal();
+    const meta = loadMetaAll();
+    
+    const userStats = {
+      total: Object.keys(users).length,
+      admins: Object.values(users).filter(u => u.role === "admin").length,
+      users: Object.values(users).filter(u => u.role !== "admin").length
+    };
+    
+    const discStats = { D: 0, I: 0, S: 0, C: 0, unknown: 0 };
+    Object.values(meta).forEach(m => {
+      if (m.disc && discStats.hasOwnProperty(m.disc)) {
+        discStats[m.disc]++;
+      } else {
+        discStats.unknown++;
+      }
+    });
+    
+    const activityByDay = {};
+    for (let day = 1; day <= 15; day++) {
+      activityByDay[day] = { users: 0, messages: 0 };
+    }
+    
+    Object.entries(journal).forEach(([userId, userJournal]) => {
+      for (let day = 1; day <= 15; day++) {
+        const dayData = userJournal[day];
+        if (dayData) {
+          const count = Array.isArray(dayData) ? dayData.length : 1;
+          if (count > 0) {
+            activityByDay[day].users++;
+            activityByDay[day].messages += count;
+          }
+        }
+      }
+    });
+    
+    res.json({
+      userStats,
+      discStats,
+      activityByDay,
+      summary: {
+        totalMessages: Object.values(journal).reduce((acc, userJournal) => {
+          return acc + Object.values(userJournal).reduce((a, dayData) => {
+            return a + (Array.isArray(dayData) ? dayData.length : (dayData ? 1 : 0));
+          }, 0);
+        }, 0)
+      }
+    });
+    
+  } catch (error) {
+    logAction('error', 'admin_analytics_error', req.userId, { error: error.message });
+    res.status(500).json({ error: "Erreur analytics" });
   }
 });
 
@@ -1186,31 +1260,7 @@ app.use("/api/*", (req, res) => {
   res.status(404).json({ error: "Route API non trouvée" });
 });
 
-// Routes spécifiques AVANT le fallback
-app.get("/admin", (req, res) => {
-  const adminPath = path.join(__dirname, "public", "admin.html");
-  if (fs.existsSync(adminPath)) {
-    console.log("📊 Serving admin.html");
-    return res.sendFile(adminPath);
-  }
-  console.log("❌ admin.html not found");
-  res.status(404).send("Admin UI non disponible");
-});
-
-// Fallback pour SPA (DOIT être en dernier)
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
-app.get("/onboarding", (req, res) => {
-  const onboardingPath = path.join(__dirname, "public", "onboarding.html");
-  if (fs.existsSync(onboardingPath)) {
-    return res.sendFile(onboardingPath);
-  }
-  res.status(404).send("Onboarding UI non déployée.");
-});
-
-// Fallback pour SPA (single page application) - DOIT ÊTRE EN DERNIER
+// Fallback pour SPA (DOIT ÊTRE EN DERNIER)
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
@@ -1255,12 +1305,13 @@ app.listen(PORT, HOST, () => {
 
 🤲🏻 Bi-idhnillah, le coaching sécurisé peut commencer !
 ✅ Corrections appliquées: 
+   - Routes /admin et /onboarding fixes
    - Sécurité renforcée (XSS, validation, timeouts)
-   - Route onboarding ajoutée
    - Gestion d'erreurs améliorée
    - Logging structuré
    - Validation stricte des données
    - Protection contre corruptions JSON
+   - Un seul catch-all en fin de fichier
   `);
 });
 
