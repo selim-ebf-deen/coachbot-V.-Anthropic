@@ -1179,11 +1179,27 @@ app.use((err, req, res, next) => {
 
 // Route 404 pour API
 app.use("/api/*", (req, res) => {
-  logAction('warn', 'api_route_not_found', req.userId, { path: req.path });
   res.status(404).json({ error: "Route API non trouvée" });
 });
 
-// Fallback pour SPA
+// Routes spécifiques AVANT le fallback
+app.get("/admin", (req, res) => {
+  const adminPath = path.join(__dirname, "public", "admin.html");
+  if (fs.existsSync(adminPath)) {
+    return res.sendFile(adminPath);
+  }
+  res.status(404).send("Admin UI non déployée.");
+});
+
+app.get("/onboarding", (req, res) => {
+  const onboardingPath = path.join(__dirname, "public", "onboarding.html");
+  if (fs.existsSync(onboardingPath)) {
+    return res.sendFile(onboardingPath);
+  }
+  res.status(404).send("Onboarding UI non déployée.");
+});
+
+// Fallback pour SPA (single page application) - DOIT ÊTRE EN DERNIER
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
