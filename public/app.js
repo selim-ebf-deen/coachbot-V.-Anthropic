@@ -1649,3 +1649,6 @@ class CoachBot {
             
             this.saveMessage(response, 'ai');
             this.currentStreamingMessage = null;
+             }
+    }
+}
