@@ -1657,6 +1657,14 @@ async simulateAIResponse(message) {
         this.showErrorMessage('Erreur de génération de réponse');
     }
 }
+        
+        logError('ai_simulation_success', 'success', { responseLength: response.length });
+        
+    } catch (error) {
+        logError('simulate_ai_response_error', error);
+        this.showErrorMessage('Erreur de génération de réponse');
+    }
+}
           } catch (error) {
             logError('simulate_ai_response_error', error);
             this.showErrorMessage('Erreur de génération de réponse');
