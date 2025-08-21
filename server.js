@@ -1186,9 +1186,16 @@ app.use("/api/*", (req, res) => {
 app.get("/admin", (req, res) => {
   const adminPath = path.join(__dirname, "public", "admin.html");
   if (fs.existsSync(adminPath)) {
+    console.log("📊 Serving admin.html");
     return res.sendFile(adminPath);
   }
-  res.status(404).send("Admin UI non déployée.");
+  console.log("❌ admin.html not found");
+  res.status(404).send("Admin UI non disponible");
+});
+
+// Fallback pour SPA (DOIT être en dernier)
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 app.get("/onboarding", (req, res) => {
