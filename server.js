@@ -1260,11 +1260,6 @@ app.use("/api/*", (req, res) => {
   res.status(404).json({ error: "Route API non trouvée" });
 });
 
-// Fallback pour SPA (DOIT ÊTRE EN DERNIER)
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
 // Configuration du serveur
 const PORT = process.env.PORT || 8787;
 const HOST = process.env.HOST || "0.0.0.0";
