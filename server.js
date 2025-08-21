@@ -570,6 +570,18 @@ app.get("/admin", (req, res) => {
   res.status(404).send("Admin UI non trouvée");
 });
 
+// 👑 ADMIN DASHBOARD ROUTES
+// 
+// ✅ ROUTE PRINCIPALE: /adminpanel 
+//    - Interface admin fonctionnelle
+//    - Pas de problème de cache
+//    - URL recommandée pour les admins
+//
+// ⚠️ ROUTE LEGACY: /admin 
+//    - Problème de cache navigateur
+//    - Garde pour compatibilité
+//    - À corriger plus tard
+
 // Route ADMIN TEMPORAIRE (pour test)
 app.get("/adminpanel", (req, res) => {
   const adminPath = path.join(__dirname, "public", "admin.html");
