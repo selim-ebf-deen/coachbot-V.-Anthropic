@@ -538,6 +538,23 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
+// Route de debug pour voir les fichiers
+app.get("/debug-files", (req, res) => {
+  try {
+    const publicDir = path.join(__dirname, "public");
+    const files = fs.readdirSync(publicDir);
+    res.json({
+      publicPath: publicDir,
+      files: files,
+      adminExists: fs.existsSync(path.join(publicDir, "admin.html")),
+      indexExists: fs.existsSync(path.join(publicDir, "index.html")),
+      appExists: fs.existsSync(path.join(publicDir, "app.js"))
+    });
+  } catch (error) {
+    res.json({ error: error.message });
+  }
+});
+
 // Route ADMIN
 app.get("/admin", (req, res) => {
   const adminPath = path.join(__dirname, "public", "admin.html");
