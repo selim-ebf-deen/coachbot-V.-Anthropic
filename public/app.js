@@ -1629,26 +1629,34 @@ class CoachBot {
         this.currentStreamingMessage = null;
     }
 
-    async simulateAIResponse(message) {
-        try {
-            const onboardingData = localStorage.getItem('coachbot_onboarding');
-            const userMessage = message.toLowerCase();
-            this.messageCounter++;
+async simulateAIResponse(message) {
+    try {
+        const onboardingData = localStorage.getItem('coachbot_onboarding');
+        const userMessage = message.toLowerCase();
+        this.messageCounter++;
 
-            // Réponses contextuelles selon l'onboarding et le message
-            let responses = this.generateContextualResponses(onboardingData, userMessage);
+        // Réponses contextuelles selon l'onboarding et le message
+        let responses = this.generateContextualResponses(onboardingData, userMessage);
 
-            // Éviter les répétitions
-            const response = this.selectUniqueResponse(responses);
+        // Éviter les répétitions
+        const response = this.selectUniqueResponse(responses);
 
-            // Simulation du streaming
-            const messageDiv = this.createStreamingMessageDiv();
-            
-            // Animation de frappe
-            await this.typeWriterEffect(response);
-            
-            this.saveMessage(response, 'ai');
-            this.currentStreamingMessage = null;
+        // Simulation du streaming
+        const messageDiv = this.createStreamingMessageDiv();
+        
+        // Animation de frappe
+        await this.typeWriterEffect(response);
+        
+        this.saveMessage(response, 'ai');
+        this.currentStreamingMessage = null;
+        
+        logError('ai_simulation_success', 'success', { responseLength: response.length });
+        
+    } catch (error) {
+        logError('simulate_ai_response_error', error);
+        this.showErrorMessage('Erreur de génération de réponse');
+    }
+}
           } catch (error) {
             logError('simulate_ai_response_error', error);
             this.showErrorMessage('Erreur de génération de réponse');
