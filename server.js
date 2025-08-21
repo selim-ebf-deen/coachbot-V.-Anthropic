@@ -553,6 +553,21 @@ app.get("/admin", (req, res) => {
   res.status(404).send("Admin UI non trouvée");
 });
 
+// Route ADMIN TEMPORAIRE (pour test)
+app.get("/adminpanel", (req, res) => {
+  const adminPath = path.join(__dirname, "public", "admin.html");
+  console.log("🔍 Tentative d'accès adminpanel:", adminPath);
+  console.log("📁 Fichier existe:", fs.existsSync(adminPath));
+  
+  if (fs.existsSync(adminPath)) {
+    console.log("✅ Envoi de admin.html depuis /adminpanel");
+    return res.sendFile(adminPath);
+  }
+  
+  console.log("❌ admin.html introuvable depuis /adminpanel");
+  res.status(404).send("Admin UI non trouvée depuis /adminpanel");
+});
+
 // Route ONBOARDING
 app.get("/onboarding", (req, res) => {
   const onboardingPath = path.join(__dirname, "public", "onboarding.html");
