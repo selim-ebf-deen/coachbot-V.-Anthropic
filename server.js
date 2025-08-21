@@ -552,16 +552,20 @@ app.use(express.static(path.join(__dirname, "public"), {
 }));
 
 // Routes principales
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
 app.get("/admin", (req, res) => {
   const adminPath = path.join(__dirname, "public", "admin.html");
+  console.log("🔍 Tentative d'accès admin:", adminPath);
+  console.log("📁 Fichier existe:", fs.existsSync(adminPath));
+  
   if (fs.existsSync(adminPath)) {
+    console.log("✅ Envoi de admin.html");
     return res.sendFile(adminPath);
   }
-  res.status(404).json({ error: "Interface admin non disponible" });
+  
+  console.log("❌ admin.html introuvable");
+  res.status(404).send("Admin UI non trouvée");
+});app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 // 🆕 ROUTE ONBOARDING CORRIGÉE
