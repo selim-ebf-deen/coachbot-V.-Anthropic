@@ -648,6 +648,9 @@
         // Protection anti-double clic vocal
 let voiceClickTimeout = null;
 
+// Protection anti-double clic vocal
+let voiceClickTimeout = null;
+
 window.toggleVoice = function() {
     if (voiceClickTimeout) {
         console.log('🛑 Clic vocal ignoré (protection anti-spam)');
@@ -656,21 +659,15 @@ window.toggleVoice = function() {
     
     voiceClickTimeout = setTimeout(() => {
         voiceClickTimeout = null;
-    }, 2000); // 2 secondes de protection
+    }, 1000); // Réduit à 1 seconde
     
     console.log('🎤 Toggle Voice appelé (protégé)');
     
-    // Test direct sans CoachBot
-    navigator.mediaDevices.getUserMedia({ audio: true })
-        .then(stream => {
-            console.log('✅ MICRO AUTORISÉ !');
-            stream.getTracks().forEach(track => track.stop());
-            alert('✅ Microphone fonctionne ! (Test réussi)');
-        })
-        .catch(err => {
-            console.error('❌ MICRO REFUSÉ:', err);
-            alert('❌ Microphone bloqué. Cliquez sur le cadenas 🔒 à gauche de l\'URL et autorisez le microphone.');
-        });
+    if (window.coachBot && window.coachBot.voiceManager) {
+        window.coachBot.voiceManager.debounceToggleRecording();
+    } else {
+        console.log('⚠️ VoiceManager non disponible - initialisation en cours...');
+    }
 };
         
         window.stopSpeaking = function() {
