@@ -645,15 +645,33 @@
             }
         });
         
-        // Fonctions globales de fallback
-        window.toggleVoice = function() {
-            console.log('🎤 Toggle Voice appelé');
-            if (window.coachBot && window.coachBot.voiceManager) {
-                window.coachBot.voiceManager.toggleRecording();
-            } else {
-                console.log('⚠️ VoiceManager non disponible');
-            }
-        };
+        // Protection anti-double clic vocal
+let voiceClickTimeout = null;
+
+window.toggleVoice = function() {
+    if (voiceClickTimeout) {
+        console.log('🛑 Clic vocal ignoré (protection anti-spam)');
+        return;
+    }
+    
+    voiceClickTimeout = setTimeout(() => {
+        voiceClickTimeout = null;
+    }, 2000); // 2 secondes de protection
+    
+    console.log('🎤 Toggle Voice appelé (protégé)');
+    
+    // Test direct sans CoachBot
+    navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+            console.log('✅ MICRO AUTORISÉ !');
+            stream.getTracks().forEach(track => track.stop());
+            alert('✅ Microphone fonctionne ! (Test réussi)');
+        })
+        .catch(err => {
+            console.error('❌ MICRO REFUSÉ:', err);
+            alert('❌ Microphone bloqué. Cliquez sur le cadenas 🔒 à gauche de l\'URL et autorisez le microphone.');
+        });
+};
         
         window.stopSpeaking = function() {
             console.log('🔊 Stop Speaking appelé');
