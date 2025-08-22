@@ -413,70 +413,82 @@
         }
 
         // Gérer l'ajout d'un nouvel utilisateur
-        async function handleAddUser(e) {
-            e.preventDefault();
-            
-            const submitBtn = document.getElementById('submit-add-user');
-            const errorDiv = document.getElementById('add-user-error');
-            const successDiv = document.getElementById('add-user-success');
-            
-            errorDiv.style.display = 'none';
-            successDiv.style.display = 'none';
-            
-            const formData = new FormData(e.target);
-            const userData = {
-                name: formData.get('name'),
-                email: formData.get('email'),
-                password: formData.get('password'),
-                role: formData.get('role') || 'user'
-            };
-            
-            if (!userData.name || !userData.email || !userData.password) {
-                showAddUserError('Tous les champs obligatoires doivent être remplis');
-                return;
-            }
-            
-            if (userData.password.length < 6) {
-                showAddUserError('Le mot de passe doit contenir au moins 6 caractères');
-                return;
-            }
-            
-            submitBtn.disabled = true;
-            submitBtn.textContent = 'Création en cours...';
-            
-            try {
-                const token = localStorage.getItem('coachbot_token');
-                const response = await fetch('/api/auth/register', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify(userData)
-                });
-                
-                const result = await response.json();
-                
-                if (!response.ok) {
-                    throw new Error(result.error || `Erreur ${response.status}`);
-                }
-                
-                showAddUserSuccess(`✅ Utilisateur "${userData.name}" créé avec succès !`);
-                
-                setTimeout(() => {
-                    loadAllData();
-                    closeAddUserModal();
-                }, 2000);
-                
-            } catch (error) {
-                console.error('⚠️ Erreur création utilisateur:', error);
-                showAddUserError(`Erreur lors de la création: ${error.message}`);
-            } finally {
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Créer l\'utilisateur';
-            }
+async function handleAddUser(e) {
+    e.preventDefault();
+    
+    const submitBtn = document.getElementById('submit-add-user');
+    const errorDiv = document.getElementById('add-user-error');
+    const successDiv = document.getElementById('add-user-success');
+    
+    errorDiv.style.display = 'none';
+    successDiv.style.display = 'none';
+    
+    const formData = new FormData(e.target);
+    const userData = {
+        name: formData.get('name'),
+        email: formData.get('email'),
+        password: formData.get('password'),
+        role: formData.get('role') || 'user'
+    };
+    
+    if (!userData.name || !userData.email || !userData.password) {
+        showAddUserError('Tous les champs obligatoires doivent être remplis');
+        return;
+    }
+    
+    if (userData.password.length < 6) {
+        showAddUserError('Le mot de passe doit contenir au moins 6 caractères');
+        return;
+    }
+    
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Création en cours...';
+    
+    try {
+        const token = localStorage.getItem('coachbot_token');
+        const response = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(userData)
+        });
+        
+        console.log('Response status:', response.status);
+        console.log('Response content-type:', response.headers.get('content-type'));
+        
+        // CORRECTION CRITIQUE : Vérifier le content-type
+        const contentType = response.headers.get('content-type');
+        let result;
+        
+        if (contentType && contentType.includes('application/json')) {
+            result = await response.json();
+        } else {
+            const text = await response.text();
+            console.error('Réponse non-JSON reçue:', text);
+            throw new Error('Le serveur a renvoyé du HTML au lieu de JSON. Vérifiez que vous êtes bien connecté en admin.');
         }
-
+        
+        if (!response.ok) {
+            throw new Error(result.error || `Erreur ${response.status}`);
+        }
+        
+        showAddUserSuccess(`✅ Utilisateur "${userData.name}" créé avec succès !`);
+        
+        setTimeout(() => {
+            loadAllData();
+            closeAddUserModal();
+        }, 2000);
+        
+    } catch (error) {
+        console.error('⚠️ Erreur création utilisateur:', error);
+        showAddUserError(`Erreur: ${error.message}`);
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Créer l\'utilisateur';
+    }
+}
         function showAddUserError(message) {
             const errorDiv = document.getElementById('add-user-error');
             errorDiv.textContent = message;
