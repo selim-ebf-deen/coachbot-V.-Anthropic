@@ -286,7 +286,7 @@ class VoiceManager {
 
 class CoachBot {
     constructor() {
-        this.currentDay = 1;
+        this.currentDay = this.getCurrentDay();
         this.serverMode = false;
         this.user = null;
         this.token = localStorage.getItem('coachbot_token');
