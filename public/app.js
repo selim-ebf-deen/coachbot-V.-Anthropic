@@ -440,6 +440,9 @@ class CoachBot {
             await this.checkServerConnection();
             this.updateUserInfo();
             this.loadMessages();
+
+            // 🕒 AJOUTER CETTE LIGNE
+    this.initTimer();
             
             // Vérifier onboarding après 2 secondes
             setTimeout(() => {
