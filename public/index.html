@@ -622,148 +622,148 @@
         }
 
         /* ===== STYLES GAMIFICATION ===== */
-.gamification-panel {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
-    border-radius: 15px;
-    padding: 15px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    min-width: 200px;
-    z-index: 1000;
-}
+        .gamification-panel {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            min-width: 200px;
+            z-index: 1000;
+        }
 
-.gamification-panel h3 {
-    margin: 0 0 10px 0;
-    font-size: 16px;
-    color: #333;
-}
+        .gamification-panel h3 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            color: #333;
+        }
 
-.points-display {
-    font-size: 24px;
-    font-weight: bold;
-    color: #6366F1;
-    text-align: center;
-    margin-bottom: 10px;
-}
+        .points-display {
+            font-size: 24px;
+            font-weight: bold;
+            color: #6366F1;
+            text-align: center;
+            margin-bottom: 10px;
+        }
 
-.level-display {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 8px;
-    border-radius: 8px;
-    text-align: center;
-    font-size: 14px;
-    margin-bottom: 10px;
-}
+        .level-display {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 8px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
 
-.progress-bar {
-    background: #e9ecef;
-    border-radius: 10px;
-    height: 8px;
-    margin-bottom: 10px;
-    overflow: hidden;
-}
+        .progress-bar {
+            background: #e9ecef;
+            border-radius: 10px;
+            height: 8px;
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
 
-.progress-fill {
-    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-    height: 100%;
-    border-radius: 10px;
-    transition: width 0.5s ease;
-}
+        .progress-fill {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            height: 100%;
+            border-radius: 10px;
+            transition: width 0.5s ease;
+        }
 
-.badges-container {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-    margin-top: 10px;
-}
+        .badges-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 10px;
+        }
 
-.badge {
-    background: #f8f9fa;
-    padding: 4px 8px;
-    border-radius: 15px;
-    font-size: 12px;
-    border: 1px solid #dee2e6;
-}
+        .badge {
+            background: #f8f9fa;
+            padding: 4px 8px;
+            border-radius: 15px;
+            font-size: 12px;
+            border: 1px solid #dee2e6;
+        }
 
-.celebration-popup {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: white;
-    padding: 30px;
-    border-radius: 20px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-    text-align: center;
-    z-index: 2000;
-    display: none;
-    animation: celebrationAppear 0.5s ease;
-}
+        .celebration-popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            z-index: 2000;
+            display: none;
+            animation: celebrationAppear 0.5s ease;
+        }
 
-@keyframes celebrationAppear {
-    from { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
-    to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-}
+        @keyframes celebrationAppear {
+            from { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+            to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        }
 
-.celebration-popup h2 {
-    color: #6366F1;
-    margin-bottom: 15px;
-}
+        .celebration-popup h2 {
+            color: #6366F1;
+            margin-bottom: 15px;
+        }
 
-.celebration-popup .celebration-icon {
-    font-size: 60px;
-    margin-bottom: 15px;
-    animation: bounce 1s infinite;
-}
+        .celebration-popup .celebration-icon {
+            font-size: 60px;
+            margin-bottom: 15px;
+            animation: bounce 1s infinite;
+        }
 
-@keyframes bounce {
-    0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
-    40% { transform: translateY(-10px); }
-    60% { transform: translateY(-5px); }
-}
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+            40% { transform: translateY(-10px); }
+            60% { transform: translateY(-5px); }
+        }
 
-.duaa-buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin: 15px 0;
-    justify-content: center;
-}
+        .duaa-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 15px 0;
+            justify-content: center;
+        }
 
-.duaa-btn {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border: none;
-    padding: 8px 12px;
-    border-radius: 20px;
-    cursor: pointer;
-    font-size: 12px;
-    transition: transform 0.2s;
-}
+        .duaa-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: transform 0.2s;
+        }
 
-.duaa-btn:hover {
-    transform: scale(1.05);
-}
+        .duaa-btn:hover {
+            transform: scale(1.05);
+        }
 
-.duaa-btn:active {
-    transform: scale(0.95);
-}
+        .duaa-btn:active {
+            transform: scale(0.95);
+        }
 
-/* Mobile responsive */
-@media (max-width: 768px) {
-    .gamification-panel {
-        position: static;
-        margin: 10px;
-        width: auto;
-        right: auto;
-        top: auto;
-    }
-}
+        /* Mobile responsive */
+        @media (max-width: 768px) {
+            .gamification-panel {
+                position: static;
+                margin: 10px;
+                width: auto;
+                right: auto;
+                top: auto;
+            }
+        }
         
         /* FIN TIMER STYLES */
     </style>
@@ -845,6 +845,38 @@
             >
             <button id="send-btn">Envoyer</button>
         </div>
+    </div>
+
+    <!-- Panel Gamification -->
+    <div id="gamificationPanel" class="gamification-panel">
+        <h3>🎮 Progression</h3>
+        
+        <div id="pointsDisplay" class="points-display">0 pts</div>
+        
+        <div id="levelDisplay" class="level-display">🌱 Niveau 1</div>
+        
+        <div class="progress-bar">
+            <div id="progressFill" class="progress-fill" style="width: 0%"></div>
+        </div>
+        
+        <div class="duaa-buttons">
+            <button class="duaa-btn" onclick="sendDuaa('bismillah')">بسم الله</button>
+            <button class="duaa-btn" onclick="sendDuaa('alhamdulillah')">الحمد لله</button>
+            <button class="duaa-btn" onclick="sendDuaa('astaghfirullah')">أستغفر الله</button>
+            <button class="duaa-btn" onclick="sendDuaa('subhanallah')">سبحان الله</button>
+        </div>
+        
+        <div id="badgesContainer" class="badges-container">
+            <!-- Badges will be inserted here -->
+        </div>
+    </div>
+
+    <!-- Popup de célébration -->
+    <div id="celebrationPopup" class="celebration-popup">
+        <div id="celebrationIcon" class="celebration-icon">🎉</div>
+        <h2 id="celebrationTitle">Félicitations !</h2>
+        <p id="celebrationMessage">Nouveau badge débloqué !</p>
+        <button onclick="closeCelebration()" style="margin-top: 15px; padding: 10px 20px; border: none; background: #6366F1; color: white; border-radius: 10px; cursor: pointer;">Continuer</button>
     </div>
 
     <!-- Auth Modal -->
@@ -1004,6 +1036,20 @@ window.toggleVoice = function() {
                 alert('CoachBot n\'est pas encore initialisé. Veuillez patienter...');
             }
         };
+
+        // Fonction globale pour les boutons du'a - NOUVEAU
+        function sendDuaa(duaaType) {
+            console.log('🤲 Du\'a cliqué:', duaaType);
+            if (window.gamificationUI) {
+                window.gamificationUI.sendDuaa(duaaType);
+            } else {
+                console.log('⚠️ GamificationUI non disponible');
+            }
+        }
+
+        function closeCelebration() {
+            document.getElementById('celebrationPopup').style.display = 'none';
+        }
     </script>
 </body>
 </html>
