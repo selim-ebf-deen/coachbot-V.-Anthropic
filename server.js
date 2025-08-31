@@ -943,6 +943,97 @@ process.on("unhandledRejection", (reason, promise) => {
   process.exit(1);
 });
 
+// ===== ROUTES GAMIFICATION =====
+
+// Obtenir stats gamification utilisateur
+app.get("/api/gamification/stats", authMiddleware, (req, res) => {
+    try {
+        const stats = getUserGamificationStats(req.user.sub);
+        const currentLevel = gamification.calculateLevel(stats.totalPoints);
+        const progress = gamification.getProgressToNextLevel(stats.totalPoints);
+        
+        res.json({
+            success: true,
+            stats: {
+                ...stats,
+                currentLevel,
+                progress
+            }
+        });
+    } catch (error) {
+        console.error('Erreur stats gamification:', error);
+        res.status(500).json({ error: 'Erreur serveur' });
+    }
+});
+
+// Traiter action gamification
+app.post("/api/gamification/action", authMiddleware, (req, res) => {
+    try {
+        const { actionType, points, context } = req.body;
+        const userId = req.user.sub;
+        
+        // Ajouter points
+        const updatedStats = addPointsToUser(userId, points, actionType);
+        
+        // Vérifier nouveaux badges
+        const newBadges = gamification.checkNewBadges(updatedStats);
+        
+        // Si nouveaux badges, les ajouter
+        if (newBadges.length > 0) {
+            updatedStats.badges = [...updatedStats.badges, ...newBadges];
+            updateUserGamificationStats(userId, { badges: updatedStats.badges });
+        }
+        
+        // Calculer niveau et progression
+        const currentLevel = gamification.calculateLevel(updatedStats.totalPoints);
+        const progress = gamification.getProgressToNextLevel(updatedStats.totalPoints);
+        
+        res.json({
+            success: true,
+            pointsAdded: points,
+            totalPoints: updatedStats.totalPoints,
+            newBadges: newBadges,
+            currentLevel: currentLevel,
+            progress: progress,
+            celebrateNewBadges: newBadges.length > 0,
+            celebrateLevelUp: false // TODO: détecter level up
+        });
+    } catch (error) {
+        console.error('Erreur action gamification:', error);
+        res.status(500).json({ error: 'Erreur serveur' });
+    }
+});
+
+// Obtenir badges disponibles
+app.get("/api/gamification/badges", authMiddleware, (req, res) => {
+    res.json({
+        success: true,
+        badges: gamification.badges
+    });
+});
+
+// Manuel : donner points pour du'a spécifique
+app.post("/api/gamification/duaa", authMiddleware, (req, res) => {
+    try {
+        const { duaaType } = req.body; // "bismillah", "alhamdulillah", etc.
+        const userId = req.user.sub;
+        
+        const points = gamification.pointsConfig.duaa[duaaType] || 10;
+        const updatedStats = addPointsToUser(userId, points, 'duaa');
+        
+        res.json({
+            success: true,
+            duaaType: duaaType,
+            pointsAdded: points,
+            totalPoints: updatedStats.totalPoints,
+            message: `🤲 ${points} points pour "${duaaType}" - Barakallahu fik !`
+        });
+    } catch (error) {
+        console.error('Erreur du\'a gamification:', error);
+        res.status(500).json({ error: 'Erreur serveur' });
+    }
+});
+
 // Démarrage du serveur
 app.listen(PORT, HOST, () => {
   console.log(`
