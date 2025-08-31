@@ -16,6 +16,18 @@ const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Ajouter après les imports existants
+import GamificationSystem from './gamification.js';
+import { 
+    getUserGamificationStats, 
+    updateUserGamificationStats, 
+    addPointsToUser,
+    updateUserStreak 
+} from './gamificationData.js';
+
+// Initialiser le système de gamification
+const gamification = new GamificationSystem();
+
 // 🎤 HEADERS MICROPHONE OBLIGATOIRES - FIX CRITIQUE
 app.use((req, res, next) => {
   res.setHeader('Permissions-Policy', 'microphone=*, camera=*, geolocation=*');
