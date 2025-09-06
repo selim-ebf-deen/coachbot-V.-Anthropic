@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Le Sceau des Compétences - Interactif</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #1a3a52 0%, #2d5a4f 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1000px;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.97);
+            border-radius: 30px;
+            padding: 40px;
+            box-shadow: 0 25px 70px rgba(0, 0, 0, 0.3);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #0a1929;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            font-weight: 700;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+            line-height: 1.6;
+        }
+        
+        .subtitle small {
+            display: block;
+            margin-top: 8px;
+            font-size: 0.95em;
+            color: #888;
+            font-style: italic;
+        }
+        
+        /* Contrôles interactifs */
+        .controls {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 15px;
+        }
+        
+        .control-item {
+            text-align: center;
+            flex: 1;
+            padding: 0 10px;
+        }
+        
+        .control-label {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 0.9em;
+        }
+        
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .slider {
+            flex: 1;
+            -webkit-appearance: none;
+            height: 6px;
+            border-radius: 5px;
+            background: #d3d3d3;
+            outline: none;
+            opacity: 0.9;
+            transition: opacity 0.2s;
+        }
+        
+        .slider:hover {
+            opacity: 1;
+        }
+        
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #4CAF50;
+            cursor: pointer;
+        }
+        
+        .slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #4CAF50;
+            cursor: pointer;
+        }
+        
+        .score-display {
+            min-width: 30px;
+            font-weight: 700;
+            color: #2c3e50;
+        }
+        
+        .barrel-container {
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            margin: 40px auto;
+            max-width: 600px;
+            position: relative;
+            min-height: 450px;
+            padding-top: 80px;
+        }
+        
+        .barrel {
+            display: flex;
+            gap: 5px;
+            align-items: flex-end;
+            position: relative;
+            padding: 20px;
+            padding-bottom: 40px;
+        }
+        
+        .latte {
+            width: 120px;
+            background: linear-gradient(180deg, #8b6914 0%, #daa520 50%, #8b6914 100%);
+            border-radius: 5px 5px 0 0;
+            position: relative;
+            transition: all 0.5s ease;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .latte:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        .latte-content {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-weight: 600;
+            font-size: 0.9em;
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            padding: 10px 5px;
+        }
+        
+        .latte-label {
+            position: absolute;
+            top: -40px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            font-weight: 600;
+            font-size: 0.9em;
+            white-space: nowrap;
+            min-width: 100px;
+            text-align: center;
+        }
+        
+        .latte-score {
+            position: absolute;
+            top: -70px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: white;
+            font-size: 1.1em;
+            transition: all 0.3s ease;
+        }
+        
+        .score-low { background: #d32f2f; }
+        .score-medium { background: #f57c00; }
+        .score-good { background: #388e3c; }
+        .score-excellent { background: #1976d2; }
+        
+        /* Ligne de niveau minimum */
+        .minimum-line {
+            position: absolute;
+            bottom: 250px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: #ff4444;
+            z-index: 10;
+        }
+        
+        .minimum-line::before {
+            content: 'Niveau Minimum 5/10';
+            position: absolute;
+            right: 10px;
+            top: -10px;
+            background: #ff4444;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.9em;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        
+        .legend {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin-top: 40px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 15px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .legend-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5em;
+        }
+        
+        .legend-text h3 {
+            font-size: 1em;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+        
+        .legend-text p {
+            font-size: 0.85em;
+            color: #7f8c8d;
+            margin: 0;
+        }
+        
+        .verse-quote {
+            text-align: center;
+            padding: 20px;
+            margin-top: 30px;
+            background: linear-gradient(135deg, #fff3e0, #ffe0b2);
+            border-radius: 15px;
+            font-style: italic;
+            color: #5d4037;
+            border-left: 4px solid #daa520;
+        }
+        
+        .verse-quote small {
+            display: block;
+            margin-top: 5px;
+            font-size: 0.9em;
+            color: #8d6e63;
+        }
+        
+        /* Indicateur de faiblesse */
+        .weak-indicator {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #ff4444;
+            font-size: 2em;
+            animation: blink 1.5s infinite;
+            display: none;
+        }
+        
+        .weak-indicator.visible {
+            display: block;
+        }
+        
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            .controls {
+                flex-direction: column;
+                gap: 20px;
+            }
+            .barrel-container {
+                transform: scale(0.8);
+                margin: 20px auto;
+            }
+            .latte {
+                width: 80px;
+            }
+            .latte-label {
+                font-size: 0.8em;
+                min-width: 80px;
+            }
+            .legend {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Le Sceau des Compétences</h1>
+        <p class="subtitle">
+            "Votre capacité à 'stocker' le succès dépend de la latte la plus BASSE"<br>
+            <small>Une faiblesse majeure sabote tout le reste et fait fuir les bénédictions d'Allah ﷻ</small>
+        </p>
+        
+        <!-- Contrôles interactifs -->
+        <div class="controls">
+            <div class="control-item">
+                <div class="control-label">🤲 Talents Spirituels</div>
+                <div class="slider-container">
+                    <input type="range" min="1" max="10" value="3" class="slider" id="slider1">
+                    <span class="score-display" id="score1">3</span>
+                </div>
+            </div>
+            
+            <div class="control-item">
+                <div class="control-label">💝 Talents Relationnels</div>
+                <div class="slider-container">
+                    <input type="range" min="1" max="10" value="6" class="slider" id="slider2">
+                    <span class="score-display" id="score2">6</span>
+                </div>
+            </div>
+            
+            <div class="control-item">
+                <div class="control-label">📊 Talents Business</div>
+                <div class="slider-container">
+                    <input type="range" min="1" max="10" value="8" class="slider" id="slider3">
+                    <span class="score-display" id="score3">8</span>
+                </div>
+            </div>
+            
+            <div class="control-item">
+                <div class="control-label">💪 Talents Physiques</div>
+                <div class="slider-container">
+                    <input type="range" min="1" max="10" value="4" class="slider" id="slider4">
+                    <span class="score-display" id="score4">4</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="barrel-container">
+            <div class="minimum-line"></div>
+            <div class="barrel">
+                <div class="latte" id="latte1" style="height: 190px;">
+                    <div class="latte-score score-low" id="latte-score1">3</div>
+                    <div class="latte-label">Spirituel</div>
+                    <div class="latte-content" id="latte-content1">FAIBLE</div>
+                    <div class="weak-indicator visible" id="weak1">⚠️</div>
+                </div>
+                
+                <div class="latte" id="latte2" style="height: 280px;">
+                    <div class="latte-score score-good" id="latte-score2">6</div>
+                    <div class="latte-label">Relationnel</div>
+                    <div class="latte-content" id="latte-content2">CORRECT</div>
+                    <div class="weak-indicator" id="weak2">⚠️</div>
+                </div>
+                
+                <div class="latte" id="latte3" style="height: 340px;">
+                    <div class="latte-score score-excellent" id="latte-score3">8</div>
+                    <div class="latte-label">Business</div>
+                    <div class="latte-content" id="latte-content3">FORT</div>
+                    <div class="weak-indicator" id="weak3">⚠️</div>
+                </div>
+                
+                <div class="latte" id="latte4" style="height: 220px;">
+                    <div class="latte-score score-low" id="latte-score4">4</div>
+                    <div class="latte-label">Physique</div>
+                    <div class="latte-content" id="latte-content4">FAIBLE</div>
+                    <div class="weak-indicator visible" id="weak4">⚠️</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-icon" style="background: linear-gradient(135deg, #e8f5e9, #4caf50);">
+                    🤲
+                </div>
+                <div class="legend-text">
+                    <h3>Talents Spirituels</h3>
+                    <p>Dhikr, du'a, patience, tawakkul, connexion avec Allah</p>
+                </div>
+            </div>
+            
+            <div class="legend-item">
+                <div class="legend-icon" style="background: linear-gradient(135deg, #e3f2fd, #2196f3);">
+                    💝
+                </div>
+                <div class="legend-text">
+                    <h3>Talents Relationnels</h3>
+                    <p>Empathie, service, leadership, générosité, pardon</p>
+                </div>
+            </div>
+            
+            <div class="legend-item">
+                <div class="legend-icon" style="background: linear-gradient(135deg, #f3e5f5, #9c27b0);">
+                    📊
+                </div>
+                <div class="legend-text">
+                    <h3>Talents Entrepreneuriaux</h3>
+                    <p>Vision, analyse, exécution, commerce halal, stratégie</p>
+                </div>
+            </div>
+            
+            <div class="legend-item">
+                <div class="legend-icon" style="background: linear-gradient(135deg, #fff3e0, #ff9800);">
+                    💪
+                </div>
+                <div class="legend-text">
+                    <h3>Talents Physiques & Mentaux</h3>
+                    <p>Énergie, endurance, concentration, gestion du stress</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="verse-quote">
+            "Celui qui donne et craint (Allah) et déclare véridique la plus belle récompense,<br>
+            Nous lui faciliterons la voie au plus grand bonheur"<br>
+            <small>[Al-Layl 92:5-7]</small><br><br>
+            "Le croyant fort est meilleur et plus aimé d'Allah que le croyant faible"<br>
+            <small>[Sahih Muslim n°2664]</small>
+        </div>
+    </div>
+    
+    <script>
+        // Fonction pour mettre à jour une latte
+        function updateLatte(index, value) {
+            const latte = document.getElementById('latte' + index);
+            const score = document.getElementById('latte-score' + index);
+            const content = document.getElementById('latte-content' + index);
+            const weak = document.getElementById('weak' + index);
+            const scoreDisplay = document.getElementById('score' + index);
+            
+            // Mettre à jour l'affichage du score
+            score.textContent = value;
+            scoreDisplay.textContent = value;
+            
+            // Calculer la hauteur (30px par point, minimum 100px)
+            const height = 100 + (parseInt(value) * 30);
+            latte.style.height = height + 'px';
+            
+            // Mettre à jour la couleur du score
+            score.className = 'latte-score';
+            if (value < 5) {
+                score.classList.add('score-low');
+                weak.classList.add('visible');
+            } else if (value == 5) {
+                score.classList.add('score-medium');
+                weak.classList.remove('visible');
+            } else if (value <= 7) {
+                score.classList.add('score-good');
+                weak.classList.remove('visible');
+            } else {
+                score.classList.add('score-excellent');
+                weak.classList.remove('visible');
+            }
+            
+            // Mettre à jour le texte du niveau
+            if (value <= 3) {
+                content.textContent = 'FAIBLE';
+            } else if (value <= 5) {
+                content.textContent = 'MOYEN';
+            } else if (value <= 7) {
+                content.textContent = 'CORRECT';
+            } else if (value <= 9) {
+                content.textContent = 'FORT';
+            } else {
+                content.textContent = 'EXCELLENT';
+            }
+        }
+        
+        // Ajouter les écouteurs d'événements
+        document.getElementById('slider1').addEventListener('input', function() {
+            updateLatte(1, this.value);
+        });
+        
+        document.getElementById('slider2').addEventListener('input', function() {
+            updateLatte(2, this.value);
+        });
+        
+        document.getElementById('slider3').addEventListener('input', function() {
+            updateLatte(3, this.value);
+        });
+        
+        document.getElementById('slider4').addEventListener('input', function() {
+            updateLatte(4, this.value);
+        });
+        
+        // Initialiser les lattes au chargement
+        window.addEventListener('load', function() {
+            updateLatte(1, 3);
+            updateLatte(2, 6);
+            updateLatte(3, 8);
+            updateLatte(4, 4);
+        });
+    </script>
+</body>
+</html>

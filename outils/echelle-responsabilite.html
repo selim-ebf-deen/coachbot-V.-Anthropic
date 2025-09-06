@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>L'Échelle de Responsabilité</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #0a1929 0%, #1a3a52 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 900px;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 30px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #0a1929;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            font-weight: 700;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 40px;
+            font-size: 1.1em;
+        }
+        
+        .subtitle small {
+            display: block;
+            margin-top: 5px;
+            font-size: 0.9em;
+            color: #999;
+        }
+        
+        .ladder {
+            position: relative;
+            margin: 40px auto;
+            width: 100%;
+            max-width: 700px;
+        }
+        
+        .level {
+            display: flex;
+            align-items: center;
+            margin: 15px 0;
+            padding: 20px;
+            border-radius: 15px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .level:hover {
+            transform: translateX(10px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+        
+        .level-number {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.3em;
+            margin-right: 20px;
+            flex-shrink: 0;
+        }
+        
+        .level-content {
+            flex: 1;
+        }
+        
+        .level-title {
+            font-weight: 600;
+            font-size: 1.2em;
+            margin-bottom: 5px;
+        }
+        
+        .level-description {
+            font-size: 0.95em;
+            opacity: 0.9;
+        }
+        
+        /* Zone Rouge (Below the Line) */
+        .red-zone {
+            background: linear-gradient(135deg, #ff6b6b, #ff8787);
+            color: white;
+        }
+        
+        .red-zone .level-number {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+        }
+        
+        /* Zone Verte (Above the Line) */
+        .green-zone {
+            background: linear-gradient(135deg, #2d6a4f, #52b788);
+            color: white;
+        }
+        
+        .green-zone .level-number {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+        }
+        
+        /* Ligne de flottaison */
+        .floating-line {
+            position: relative;
+            margin: 30px 0;
+            text-align: center;
+        }
+        
+        .floating-line::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, #ff6b6b, #52b788);
+            transform: translateY(-50%);
+        }
+        
+        .floating-line-text {
+            background: white;
+            padding: 10px 20px;
+            display: inline-block;
+            position: relative;
+            font-weight: 600;
+            color: #0a1929;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .zone-label {
+            text-align: center;
+            font-weight: 700;
+            font-size: 1.3em;
+            margin: 20px 0;
+            padding: 10px;
+            border-radius: 10px;
+            line-height: 1.4;
+        }
+        
+        .zone-label.red {
+            color: #ff6b6b;
+            background: rgba(255, 107, 107, 0.1);
+        }
+        
+        .zone-label.green {
+            color: #2d6a4f;
+            background: rgba(45, 106, 79, 0.1);
+        }
+        
+        .hadith-quote {
+            text-align: center;
+            padding: 20px;
+            margin-top: 30px;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border-radius: 15px;
+            font-style: italic;
+            color: #495057;
+            border-left: 4px solid #2d6a4f;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        .level:hover .level-number {
+            animation: pulse 1s infinite;
+        }
+        
+        @media (max-width: 768px) {
+            h1 { font-size: 2em; }
+            .level { padding: 15px; }
+            .level-number { width: 40px; height: 40px; font-size: 1.1em; }
+            .level-title { font-size: 1.1em; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>L'Échelle de Responsabilité</h1>
+        <p class="subtitle">
+            "Chacun de vous est un berger et sera questionné sur son troupeau"<br>
+            <small>[Sahih Al-Bukhari n°893 et Sahih Muslim n°1829]</small>
+        </p>
+        
+        <div class="ladder">
+            <div class="zone-label green">ZONE VERTE - Above the Line<br>YAQIN (Certitude spirituelle)</div>
+            
+            <div class="level green-zone" onclick="this.style.transform = 'scale(1.02)'">
+                <div class="level-number">8</div>
+                <div class="level-content">
+                    <div class="level-title">AGIR</div>
+                    <div class="level-description">"Voici mon plan d'action" - Action concrète avec tawakkul</div>
+                </div>
+            </div>
+            
+            <div class="level green-zone" onclick="this.style.transform = 'scale(1.02)'">
+                <div class="level-number">7</div>
+                <div class="level-content">
+                    <div class="level-title">ANALYSER</div>
+                    <div class="level-description">"Quelles sont mes options ?" - Recherche de solutions</div>
+                </div>
+            </div>
+            
+            <div class="level green-zone" onclick="this.style.transform = 'scale(1.02)'">
+                <div class="level-number">6</div>
+                <div class="level-content">
+                    <div class="level-title">ASSUMER</div>
+                    <div class="level-description">"C'est ma responsabilité" - Acceptation totale</div>
+                </div>
+            </div>
+            
+            <div class="level green-zone" onclick="this.style.transform = 'scale(1.02)'">
+                <div class="level-number">5</div>
+                <div class="level-content">
+                    <div class="level-title">RECONNAÎTRE</div>
+                    <div class="level-description">"J'accepte la réalité" - Première prise de conscience</div>
+                </div>
+            </div>
+            
+            <div class="floating-line">
+                <span class="floating-line-text">🌊 Ligne de Flottaison - Respirez ! 🌊</span>
+            </div>
+            
+            <div class="zone-label red">ZONE ROUGE - Below the Line<br>GHAFLAH (Insouciance spirituelle)</div>
+            
+            <div class="level red-zone" onclick="this.style.transform = 'scale(1.02)'">
+                <div class="level-number">4</div>
+                <div class="level-content">
+                    <div class="level-title">ATTENDRE</div>
+                    <div class="level-description">"Il faut que ça s'arrange" - Passivité totale</div>
+                </div>
+            </div>
+            
+            <div class="level red-zone" onclick="this.style.transform = 'scale(1.02)'">
+                <div class="level-number">3</div>
+                <div class="level-content">
+                    <div class="level-title">SE JUSTIFIER</div>
+                    <div class="level-description">"Oui mais c'est compliqué" - Excuses permanentes</div>
+                </div>
+            </div>
+            
+            <div class="level red-zone" onclick="this.style.transform = 'scale(1.02)'">
+                <div class="level-number">2</div>
+                <div class="level-content">
+                    <div class="level-title">ACCUSER</div>
+                    <div class="level-description">"C'est la faute des autres" - Victime perpétuelle</div>
+                </div>
+            </div>
+            
+            <div class="level red-zone" onclick="this.style.transform = 'scale(1.02)'">
+                <div class="level-number">1</div>
+                <div class="level-content">
+                    <div class="level-title">IGNORER</div>
+                    <div class="level-description">"Quel problème ?" - Déni total de la réalité</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="hadith-quote">
+            "Tout bien qui t'atteint vient d'Allah, et tout mal qui t'atteint vient de toi-même"<br>
+            <small>[An-Nisa 4:79]</small>
+        </div>
+    </div>
+</body>
+</html>
